@@ -1,7 +1,5 @@
 from qutip import Qobj
-
 from .base import Objective
-from qoc.fom.base import FigureOfMerit
 
 class StateTransfer(Objective):
     """
@@ -12,14 +10,27 @@ class StateTransfer(Objective):
     be the same type and have matching dimensions.
     """
 
-    def __init__(self, initial: Qobj, figure_of_merit: FigureOfMerit, target: Qobj = None):
+    def __init__(self, initial: Qobj, target: Qobj = None):
         # If target is not provided, it must be inferrable from the figure of merit
-        if not target:
-            target = self._infer_target_from_figure_of_merit(figure_of_merit)
+        if not target: # TODO: decide what to do: do we actually allow not providing it for state transfer? 
+            pass
         _validate_states(initial, target)
-        super().__init__(initial, figure_of_merit, target)
+        super().__init__(initial, target)
+        # TODO: should we try to infer here whether we are dealing with closed or open system?
 
+    def compute(self, current: Qobj, target: Qobj = None) -> float:
+        # TODO: what do we do if target is not provided?
+        if current.isket:
+            # In QuTiP 5, bra * ket returns a complex scalar directly
+            overlap = target.dag() * current
+            return 1.0 - abs(overlap) ** 2
+        else:
+            # Uhlmann fidelity for density matrices: Tr[sqrt(sqrt(rho) sigma sqrt(rho))]
+            # qutip.fidelity returns F (not F²), so we square it to stay consistent
+            # with the pure-state convention above.
+            return 1.0 - qutip.fidelity(current, target) ** 2
 
+# Here, trying to infer if input it's a density matrix (-> the objective function has to be adopted for open system case)
 def is_density_matrix(obj, tol=1e-10):
     return (
         obj.isherm and
