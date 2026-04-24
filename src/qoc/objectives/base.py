@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 # Here, it feels natural to talk about fidelity (or another measure of closeness to the target) and make it a part of Objective. In itself, the measure may involve target, so passing a target can be optional. 
 
 # Class for validation
-class Objective(ABC):
+class Objective:
     """
     Holds the initial condition, the target, and the measure that
     scores how close the current system's state is to the target.
@@ -15,10 +15,10 @@ class Objective(ABC):
     initial/target must be - validation lives in the subclasses.
     """
 
-    def __init__(self, initial: Qobj, target: Qobj = None):
+    def __init__(self, initial: Qobj, target: Qobj = None, objective_func: callable = None):
         self.initial = initial
         self.target = target
+        self.objective_func = objective_func
 
-    @abstractmethod
     def compute(self, current: Qobj, target: Qobj = None) -> float:
-        raise NotImplemented()
+        return self.objective_func(current, target)

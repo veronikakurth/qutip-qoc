@@ -1,6 +1,20 @@
 from qutip import Qobj
 from .base import Objective
 
+
+def state_fidelity(current, target):
+    # TODO: what do we do if target is not provided?
+    if current.isket:
+        # In QuTiP 5, bra * ket returns a complex scalar directly
+        overlap = target.dag() * current
+        return 1.0 - abs(overlap) ** 2
+    else:
+        # Uhlmann fidelity for density matrices: Tr[sqrt(sqrt(rho) sigma sqrt(rho))]
+        # qutip.fidelity returns F (not F²), so we square it to stay consistent
+        # with the pure-state convention above.
+        return 1.0 - qutip.fidelity(current, target) ** 2
+
+
 class StateTransfer(Objective):
     """
     Objective for state-to-state transfer.
@@ -18,17 +32,6 @@ class StateTransfer(Objective):
         super().__init__(initial, target)
         # TODO: should we try to infer here whether we are dealing with closed or open system?
 
-    def compute(self, current: Qobj, target: Qobj = None) -> float:
-        # TODO: what do we do if target is not provided?
-        if current.isket:
-            # In QuTiP 5, bra * ket returns a complex scalar directly
-            overlap = target.dag() * current
-            return 1.0 - abs(overlap) ** 2
-        else:
-            # Uhlmann fidelity for density matrices: Tr[sqrt(sqrt(rho) sigma sqrt(rho))]
-            # qutip.fidelity returns F (not F²), so we square it to stay consistent
-            # with the pure-state convention above.
-            return 1.0 - qutip.fidelity(current, target) ** 2
 
 # Here, trying to infer if input it's a density matrix (-> the objective function has to be adopted for open system case)
 def is_density_matrix(obj, tol=1e-10):
