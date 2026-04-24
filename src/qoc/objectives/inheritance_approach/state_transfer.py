@@ -1,18 +1,12 @@
-from qutip import Qobj
-from .base import Objective
-
+from qutip import Qobj, fidelity
 
 def state_fidelity(current, target):
-    # TODO: what do we do if target is not provided?
     if current.isket:
-        # In QuTiP 5, bra * ket returns a complex scalar directly
         overlap = target.dag() * current
         return 1.0 - abs(overlap) ** 2
     else:
-        # Uhlmann fidelity for density matrices: Tr[sqrt(sqrt(rho) sigma sqrt(rho))]
-        # qutip.fidelity returns F (not F²), so we square it to stay consistent
-        # with the pure-state convention above.
-        return 1.0 - qutip.fidelity(current, target) ** 2
+        # Uhlmann fidelity for density matrices
+        return 1.0 - fidelity(current, target) ** 2
 
 
 class StateTransfer(Objective):
@@ -41,7 +35,7 @@ def is_density_matrix(obj, tol=1e-10):
         min(obj.eigenenergies()) >= -tol
     )
 
-def _validate_states(initial: Qobj, target: Qobj) -> None:
+def _validate_states(initial, target: Qobj) -> None:
     for name, obj in [("initial", initial), ("target", target)]:
         if not isinstance(obj, Qobj):
             raise TypeError(f"{name} must be a Qobj, got {type(obj)}")

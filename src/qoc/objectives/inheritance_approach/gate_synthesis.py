@@ -1,8 +1,5 @@
 from qutip import Qobj
-
 from .base import Objective
-from qoc.fom.base import FigureOfMerit
-
 
 class GateSynthesis(Objective):
     """
@@ -12,11 +9,9 @@ class GateSynthesis(Objective):
     The initial operator is typically the identity; the target is the desired gate.
     """
 
-    def __init__(self, initial: Qobj, figure_of_merit: FigureOfMerit, target: Qobj = None):
-        if not target:
-            target = self._infer_target_from_figure_of_merit(figure_of_merit)
+    def __init__(self, target):
         _validate_operators(initial, target)
-        super().__init__(initial, target, infidelity)
+        super().__init__(target, infidelity)
 
 
 def is_unitary(obj, tol=1e-10):
