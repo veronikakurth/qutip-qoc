@@ -6,10 +6,9 @@ class Objective:
 
     """
 
-    def __init__(self, initial, target, objective_func):
-        self.initial = initial
+    def __init__(self, target, objective_func):
         self.target = target
         self.objective_func = objective_func
 
-    def compute(self, current, target):
-        return self.objective_func(current, target)
+    def compute(self, current):
+        return self.objective_func(current, self.target)
