@@ -23,7 +23,7 @@ if __name__ == '__main__':
     # Ideal Hadamard gate (1 qubit)
     H_ideal = qt.gates.hadamard_transform(1)
     # Perturbed Hadamard: ideal + small random unitary rotation
-    theta = 0.000001
+    theta = 0.01
     U_pert = H_ideal * rx(theta)
     # Compute fidelity between two unitaries
     objective_gate = Objective(H_ideal, gate_synthesis_fidelity)
