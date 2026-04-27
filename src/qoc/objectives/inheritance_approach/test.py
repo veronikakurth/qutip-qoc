@@ -1,6 +1,6 @@
 import qutip as qt
-from fidelity_objective import FidelityObjective
-from gate_synthesis import GateFidelityObjective
+from state_fidelity import FidelityObjective
+from gate_fidelity import GateFidelityObjective
 from qutip.qip.operations import rx
 
 
