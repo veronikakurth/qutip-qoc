@@ -1,16 +1,10 @@
 from qutip import Qobj, fidelity
 from utility_functions import is_density_matrix
 
-def state_transfer_fidelity(current, target):
+def state_fidelity(current, target):
     # Can be applied to states and density matrices
     _validate_states(current, target)
-
-    if current.isket:
-        overlap = target.dag() * current
-        return abs(overlap) ** 2
-    else:
-        # Uhlmann fidelity for density matrices
-        return fidelity(current, target) ** 2
+    return fidelity(current, target)
 
 
 def _validate_states(current: Qobj, target: Qobj) -> None:

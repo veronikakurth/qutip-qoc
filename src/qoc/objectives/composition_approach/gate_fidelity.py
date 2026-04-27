@@ -1,8 +1,8 @@
-from qutip import average_gate_fidelity, fidelity, Qobj, qeye
+from qutip import average_gate_fidelity, Qobj, qeye
 
-def gate_synthesis_fidelity(current, target):
+def gate_fidelity(current, target):
     _validate_operators(current, target)
-    return fidelity(current, target) # Might want to use average_gate_fidelity instead (requires conversion to superoperator)
+    return average_gate_fidelity(current, target)
 
 def is_unitary(obj, tol=1e-10):
     I = qeye(obj.shape[0])

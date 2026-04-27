@@ -1,4 +1,6 @@
-class Objective:
+from abc import ABC, abstractmethod
+
+class Objective(ABC):
     """
     Holds the target and the measure scoring how close the current system's state is to the target.
 
@@ -6,9 +8,9 @@ class Objective:
 
     """
 
-    def __init__(self, target, objective_func):
+    def __init__(self, target):
         self.target = target
-        self.objective_func = objective_func
-
+    
+    @abstractmethod
     def compute(self, current):
-        return self.objective_func(current, self.target)
+        pass

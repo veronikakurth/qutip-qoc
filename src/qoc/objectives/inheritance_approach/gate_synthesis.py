@@ -1,25 +1,29 @@
-from qutip import Qobj
-from .base import Objective
+from qutip import Qobj, qeye, average_gate_fidelity
+from base import Objective
 
-class GateSynthesis(Objective):
+class GateFidelityObjective(Objective):
     """
-    Objective for unitary gate synthesis.
+    Using fidelity of a quantum gate as a measure of closeness to the target.
 
-    Both initial and target must be square operators with matching dimensions.
-    The initial operator is typically the identity; the target is the desired gate.
+    Validation:
+    Current (achieved) and target gates must be valid unitary operators and have matching dimensions.
     """
 
-    def __init__(self, target):
-        _validate_operators(initial, target)
-        super().__init__(target, infidelity)
+    def __init__(self, target: Qobj = None):
+        if not target:
+            pass
+        super().__init__(target)
 
+    def compute(self, current):
+        _validate_operators(current, self.target)
+        return average_gate_fidelity(current, self.target)
 
 def is_unitary(obj, tol=1e-10):
     I = qeye(obj.shape[0])
     return (obj.dag() * obj - I).norm() < tol
 
-def _validate_operators(initial: Qobj, target: Qobj) -> None:
-    for name, obj in [("initial", initial), ("target", target)]:
+def _validate_operators(current: Qobj, target: Qobj) -> None:
+    for name, obj in [("current", current), ("target", target)]:
         if not isinstance(obj, Qobj):
             raise TypeError(f"{name} must be a Qobj, got {type(obj)}")
         if not obj.isoper:
@@ -27,8 +31,8 @@ def _validate_operators(initial: Qobj, target: Qobj) -> None:
         if not is_unitary(obj):
             raise ValueError(f"Operator must be unitary")
 
-    if initial.dims != target.dims:
+    if current.dims != target.dims:
         raise ValueError(
-            f"initial and target must have the same dimensions, "
-            f"got {initial.dims} and {target.dims}"
+            f"current and target must have the same dimensions, "
+            f"got {current.dims} and {target.dims}"
         )
