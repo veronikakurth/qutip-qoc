@@ -1,5 +1,5 @@
 from qutip import Qobj, fidelity
-from base import Objective
+from .base import Objective
 
 class StateFidelityObjective(Objective):
     """
