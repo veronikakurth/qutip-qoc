@@ -47,14 +47,11 @@ jobs:
             python-version: "3.12"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 
       - name: Install QuTiP from GitHub
         if: ${{ matrix.qutip-version == '@master'}}
@@ -95,9 +92,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
       - name: Install dependencies
