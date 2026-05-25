@@ -1,5 +1,5 @@
 import numpy as np
-from qutip import Qobj, sesolve
+from qutip import Qobj, sesolve, mesolve
 
 from .base import System
 
@@ -55,7 +55,10 @@ class ClosedSystem(System):
         _validate_propagation_inputs(self.H_controls, initial, control_amplitudes, times)
 
         H = self._build_hamiltonian(control_amplitudes, times)
-        result = sesolve(H, initial, times)
+        if initial.isket:
+            result = sesolve(H, initial, times)
+        else:
+            result = mesolve(H, initial, times, c_ops=[])
         return result.states[-1]
     
     # TODO: this will be different for different systems (open / closed); but the procedure is potentially generalizable to one method in base class
