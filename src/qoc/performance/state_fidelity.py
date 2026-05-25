@@ -13,19 +13,15 @@ class StateFidelity(PerformanceMeasure):
 
 
 def is_density_matrix(obj: Qobj, tol: float = 1e-10) -> bool:
-    return (
-        obj.isherm
-        and abs(obj.tr() - 1) < tol
-        and min(obj.eigenenergies()) >= -tol
-    )
+    return obj.isoper and obj.isherm and abs(obj.tr() - 1) < tol
 
 
 def _validate_states(current: Qobj, target: Qobj) -> None:
     for name, obj in [("current", current), ("target", target)]:
         if not isinstance(obj, Qobj):
             raise TypeError(f"{name} must be a Qobj, got {type(obj)}")
-        if not obj.isket and not (obj.isoper and is_density_matrix(obj)):
-            raise ValueError(f"{name} must be a ket or density matrix")
+        if not obj.isket and not is_density_matrix(obj):
+                raise ValueError(f"{name} must be a ket or density matrix")
 
     if current.isket != target.isket:
         raise ValueError(
