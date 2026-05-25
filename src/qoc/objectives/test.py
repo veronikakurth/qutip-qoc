@@ -73,3 +73,14 @@ objective_custom_measure = GateSynthesis(
         performance_measure=FunctionalPerformanceMeasure(hs_fidelity))
 
 print(objective_custom_measure.compute(final_gate))
+
+
+# Trying to imagine how an optimizer would interact with Objective and PerformanceMeasure
+
+print(objective.initial)
+print(objective.target)
+print(objective.performance_measure)
+
+# Compute cost to be minimized
+
+cost = 1 - objective.compute(final)
