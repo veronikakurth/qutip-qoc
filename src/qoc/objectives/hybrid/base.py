@@ -25,25 +25,19 @@ class Objective(ABC):
     def compute(self, current: Qobj):
         pass
 
-    def gradient(self, current: Qobj):
-        # Gradient of state vector
-        raise NotImplemented
-
 class FunctionalObjective(Objective):
     """
     Holds the target and the measure scoring how close the current system's state is to the target.
     Design approach: composition (function injection) - a user may plug and play with custom objectives.
     """
 
-    def __init__(self, target, func, grad_func = None):
+    def __init__(self, target, func):
         super().__init__(target)
         self.objective_func = func
-        self.grad_func = grad_func
         self._validate()
     
     def _validate(self):
         _validate_objective_function(self.objective_func)
-        # TODO: checks for grad func 
 
     def compute(self, current: Qobj):
         if current.dims != self.target.dims:
@@ -58,9 +52,4 @@ class FunctionalObjective(Objective):
         if not isfinite(result):
             raise ValueError(f"Not a finite result. Instead, {result}")
 
-        return result
-    
-    def gradient(self, current: Qobj):
-        result = self.grad_func(current)
-        # TODO: checks for result
         return result
