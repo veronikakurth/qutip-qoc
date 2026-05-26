@@ -32,3 +32,6 @@ class Objective:
 
     def compute(self, current: Qobj) -> float:
         return self.performance_measure.compute(current, self.target)
+
+    def loss(self) -> float:
+        return 1 - self.compute
