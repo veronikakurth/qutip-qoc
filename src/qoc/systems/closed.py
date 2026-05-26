@@ -26,6 +26,11 @@ class ClosedSystem(System):
         _validate_hamiltonians(H0, H_controls)
         self.H0 = H0
         self.H_controls = H_controls
+
+    @property
+    def n_controls(self) -> int:
+        return len(self.H_controls)
+
     # TODO: may need to rather return Result object
     def evolve(
         self,
