@@ -8,10 +8,6 @@ class ControlledSystem:
     def __init__(self, kind="closed", **system_init_params):
         self.dynamics = SystemFactory.create(kind, system_init_params)
 
-
-    def propagators(amplitude, times):
-        # Compute propagators for every time step
-
 # Factory class: decides on exact implementation of System based on "kind" parameter
 # Alternatively, it could also decide based on passed parameters
 class SystemFactory:

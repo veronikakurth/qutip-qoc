@@ -1,5 +1,5 @@
 import numpy as np
-from qutip import Qobj, sesolve, mesolve
+from qutip import Qobj
 
 from .base import System
 
@@ -31,43 +31,8 @@ class ClosedSystem(System):
     def n_controls(self) -> int:
         return len(self.H_controls)
 
-    # TODO: may need to rather return Result object
-    def evolve(
-        self,
-        initial: Qobj,
-        control_amplitudes: np.ndarray,
-        times: np.ndarray,
-    ) -> Qobj:
-        """
-        Propagate a state or operator under the time-dependent Hamiltonian.
-
-        Parameters
-        ----------
-        initial : Qobj
-            Initial state (ket/DM) for state transfer, or initial operator
-            (typically identity) for gate synthesis.
-        control_amplitudes : np.ndarray
-            Control pulse amplitudes, shape (n_controls, n_timesteps).
-            Must match len(H_controls) and len(times).
-        times : np.ndarray
-            Time grid, shape (n_timesteps,).
-
-        Returns
-        -------
-        Qobj
-            Final state (ket/DM) or final unitary operator after system evolution.
-        """
-        _validate_propagation_inputs(self.H_controls, initial, control_amplitudes, times)
-
-        H = self._build_hamiltonian(control_amplitudes, times)
-        if initial.isket:
-            result = sesolve(H, initial, times)
-        else:
-            result = mesolve(H, initial, times, c_ops=[])
-        return result.states[-1]
-    
-    # TODO: this will be different for different systems (open / closed); but the procedure is potentially generalizable to one method in base class
-    def _build_hamiltonian(
+    # TODO: Would it be better to use Coefficient class for expressing time dependency in coefficients
+    def build_hamiltonian(
         self, control_amplitudes: np.ndarray, times: np.ndarray
     ) -> list:
         """Build the QuTiP time-dependent Hamiltonian list."""
@@ -88,26 +53,3 @@ def _validate_hamiltonians(H0: Qobj, H_controls: list) -> None: # TODO: I believ
             raise ValueError(
                 f"H_controls[{k}] has dims {H_k.dims}, expected {H0.dims}"
             )
-
-def _validate_control_amplitudes(
-    H_controls: list,
-    control_amplitudes: np.ndarray,
-    times: np.ndarray,
-) -> None:
-    control_amplitudes = np.asarray(control_amplitudes)
-    if control_amplitudes.shape != (len(H_controls), len(times)):
-        raise ValueError(
-            f"control_amplitudes must have shape (n_controls={len(H_controls)}, "
-            f"n_timesteps={len(times)}), got {control_amplitudes.shape}"
-        )
-
-
-def _validate_propagation_inputs(
-    H_controls: list,
-    initial: Qobj,
-    control_amplitudes: np.ndarray,
-    times: np.ndarray,
-) -> None:
-    if not isinstance(initial, Qobj):
-        raise TypeError(f"initial must be a Qobj, got {type(initial)}")
-    _validate_control_amplitudes(H_controls, control_amplitudes, times)
