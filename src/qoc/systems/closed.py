@@ -31,15 +31,28 @@ class ClosedSystem(System):
     def n_controls(self) -> int:
         return len(self.H_controls)
 
+    @property
+    def dims(self) -> int: # TODO: it's another type from qutip.
+        return self.H0.dims
+
+    @property
+    def shape(self):
+        return self.H0.shape
+
     # TODO: Would it be better to use Coefficient class for expressing time dependency in coefficients
     def build_hamiltonian(
-        self, control_amplitudes: np.ndarray, times: np.ndarray
+        self, control_amplitudes: np.ndarray
     ) -> list:
         """Build the QuTiP time-dependent Hamiltonian list."""
         H = [self.H0]
         for k, H_k in enumerate(self.H_controls):
             H.append([H_k, control_amplitudes[k]])
         return H
+
+    def build_hamiltonian_time_j(self, control_amplitudes: np.ndarray, j: int) -> Qobj:
+        H = self.H0 + sum(control_amplitudes[k][j] * self.H_controls[k] for k in range(self.n_controls))
+        return H
+
 
 
 def _validate_hamiltonians(H0: Qobj, H_controls: list) -> None: # TODO: I believe there may be more properties we need to check in order to propagate the system. Or are these done by the solver?
