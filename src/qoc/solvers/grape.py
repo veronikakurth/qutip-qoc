@@ -1,8 +1,12 @@
 from .base import OCPSolver
+from qoc.optimizers.base import Optimizer
 from qoc.problem import OptimalControlProblem
 from qoc.result import Result
 
 class GRAPE(OCPSolver):
+
+    def __init__(self, optimizer: Optimizer):
+        self.optimizer = optimizer
 
     def solve(self, problem: OptimalControlProblem) -> Result:
         """Main entry point."""
