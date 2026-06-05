@@ -41,13 +41,15 @@ class GRAPE(OCPSolver):
             forward_evolution = self._forward_pass(Us, objective.initial)
             co_states = self._backward_pass(Us, objective.target) 
 
-            loss = objective.loss(Qobj(forward_evolution[-1]))
-            grad = self._gradient(forward_evolution, co_states, system.H_controls, N, dt)
+            loss = float(objective.loss(Qobj(forward_evolution[-1])))
+            grads = self._gradient(forward_evolution, co_states, system.H_controls, N, dt)
 
-            return loss, grad
+            return loss, grads.ravel()
+        
         opt_result = self.optimizer.minimize(loss_and_grad, x0=u0, max_iter=self.max_iter, tol=self.tol)
 
-        return Result(optimized_pulses=opt_result.x)
+        #return Result(optimized_pulses=opt_result.x)
+        return opt_result
     
     def _forward_pass(self, propagators: list, initial_state: Qobj) -> list:
         # GRAPE's forward pass to compute forward evolution
@@ -76,17 +78,25 @@ class GRAPE(OCPSolver):
                 sub_co_state = adj(propagators[i]) @ sub_co_state
             co_states[j] = sub_co_state
         return co_states
-    
+   
     # TODO: make it compliant with Scipy's interface on user-passed functions
     def _gradient(self, forward_evolution: list, co_states: list, H_c: list, N: int, dt: float):
         """
-        Calculate GRAPE graidents using a so-called adjoint method. It requires previously computed forward and backward pass
+        Calculate GRAPE gradients using a so-called adjoint method. It requires previously computed forward and backward pass
         """
-        grads = np.array([[None for t in range(N)] * len(H_c)])
+        K = len(H_c)
+        H_c_arrays = [Hc.full() for Hc in H_c]
+        
+        c = (adj(co_states[-1]) @ forward_evolution[-1]).item() # <phi|psi_N>
+
+        grads = np.zeros((K, N), dtype=float)
+
         for j in range(N):
-            for k, Hc in enumerate(H_c):
-                control_operator = -1j * Hc * dt
-                grads[k, j] = 2 * np.real(adj(co_states[j]) @ control_operator.full() @ forward_evolution[j - 1])
+            psi_j = forward_evolution[j]
+            co_state_jp1 = co_states[j + 1]
+            for k, Hc in enumerate(H_c_arrays):
+                inner = (adj(co_state_jp1) @ Hc @ psi_j).item()
+                grads[k, j] = -2.0 * dt * np.imag(np.conj(c) * inner)
         return grads
 
     def run(H0, H_c, u, target_state, T, n_iter, alpha):

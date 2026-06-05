@@ -18,4 +18,4 @@ class ScipyLBFGS(Optimizer):
 
     def minimize(self, fun, x0, max_iter, tol, **kwargs):
         opt_options = {"maxiter": max_iter, "gtol": tol}
-        return scipy.optimize.minimize(fun=fun, x0=x0.flatten(), method="L-BFGS-B", options = (opt_options | kwargs))
+        return scipy.optimize.minimize(fun=fun, x0=x0.flatten(), jac=True, method="L-BFGS-B", options = (opt_options | kwargs))

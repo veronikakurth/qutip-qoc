@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import numpy as np
+from scipy.linalg import expm
 
 from qutip import Qobj, sesolve, mesolve
 from qoc.systems.base import System
@@ -16,7 +17,7 @@ def eigendecomposition(H: Qobj, dt: float) -> np.ndarray:
 
 class StepPropagator(Propagator):
 
-    def propagate(system: System, N: int, control_amplitudes, dt: float, **kwargs) -> list:
+    def propagate(self, system: System, N: int, control_amplitudes, dt: float, **kwargs) -> list:
         """
             system : System
             N : int
