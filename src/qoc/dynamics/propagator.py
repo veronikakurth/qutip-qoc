@@ -1,5 +1,8 @@
 from abc import ABC, abstractmethod
+import numpy as np
+
 from qutip import Qobj, sesolve, mesolve
+from qoc.systems.base import System
 
 class Propagator(ABC):
    

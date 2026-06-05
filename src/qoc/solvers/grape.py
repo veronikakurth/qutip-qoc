@@ -1,5 +1,8 @@
-from .base import OCPSolver
-from qoc.optimizers.base import Optimizer
+from qutip import Qobj
+
+from qoc.solvers.base import OCPSolver
+from qoc.systems.base import System
+from qoc.optimizers.base import Optimizer, ScipyLBFGS
 from qoc.problem import OptimalControlProblem
 from qoc.dynamics.propagator import StepPropagator
 from qoc.result import Result
@@ -110,3 +113,6 @@ class GRAPE(OCPSolver):
             print(f"previous controls: \n {control_amplitudes}")
             print(f"updated controls: \n {updated_controls}")
         return updated_controls, fidelity
+
+if __name__ == "__main__":
+    solver = GRAPE(optimizer=ScipyLBFGS())
