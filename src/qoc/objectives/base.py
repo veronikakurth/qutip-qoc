@@ -29,9 +29,9 @@ class Objective:
         self.initial = initial
         self.target = target
         self.performance_measure = performance_measure
-
+    # TODO: is worth renaming to reflect what is exactly computed
     def compute(self, current: Qobj) -> float:
         return self.performance_measure.compute(current, self.target)
 
-    def loss(self) -> float:
-        return 1 - self.compute
+    def loss(self, current: Qobj) -> float:
+        return 1 - self.compute(current)
