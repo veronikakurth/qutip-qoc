@@ -1,11 +1,14 @@
-from qutip import Qobj
+import numpy as np
+from qutip import Qobj, basis, sigmax, sigmaz
 
 from qoc.solvers.base import OCPSolver
 from qoc.systems.base import System
+from qoc.systems.controlled_system import ControlledSystem
 from qoc.optimizers.base import Optimizer, ScipyLBFGS
 from qoc.problem import OptimalControlProblem
 from qoc.dynamics.propagator import StepPropagator
 from qoc.result import Result
+from qoc.objectives.state_transfer import StateTransfer
 
 class GRAPE(OCPSolver):
 
@@ -35,7 +38,7 @@ class GRAPE(OCPSolver):
             co_states = self._backward_pass(Us, objective.target) 
 
             loss = objective.loss(Qobj(forward_evolution[-1]))
-            grad = self._gradient(forward_evolution, co_states, system.H_controls, N, dt)
+            grad = self._gradient(forward_evolution, co_states, system.dynamics.H_controls, N, dt)
 
             return loss, grad
         
@@ -54,7 +57,7 @@ class GRAPE(OCPSolver):
 
         for j in range(N):
             # Build a full system Hamiltonian for time j (remember: controls are time dependent)
-            slice_Hamiltonian = system.build_hamiltonian_time_j(control_amplitudes, j)
+            slice_Hamiltonian = system.dynamics.build_hamiltonian_time_j(control_amplitudes, j)
             # Compute a propagator for the jth time slice (corresponds to (j, j + 1) time interval)
             slice_propagator = eigendecomposition(slice_Hamiltonian, dt)
             # Compute forward evolution up to slice j
@@ -114,5 +117,29 @@ class GRAPE(OCPSolver):
             print(f"updated controls: \n {updated_controls}")
         return updated_controls, fidelity
 
+def define_problem():
+    # Helper function: Collect problem definition into OCPProblem container
+    
+    # Model parameters
+    H0 = 0 * sigmaz()
+    H_c = [sigmax() / 2]
+    system = ControlledSystem('closed', H0=H0, H_controls=H_c)
+    # Simulation parameters
+    T = 10
+    N = 10
+    n_iter = 5 # Algorithm iterations
+    alpha = 0.1 # Gradient step
+    times = np.linspace(0, T, N)
+    # Initial conditions and target 
+    control_amplitudes = np.array([[np.pi for t in times] for i in range(system.dynamics.n_controls)])
+    initial_state = basis(2, 0)
+    target_state = basis(2, 1)
+    # Choose performance measure and aggregate it with initial conditions and target into a objective -> verify the objective is consistent
+    objective = StateTransfer(initial_state, target_state)
+    problem = OptimalControlProblem(system, objective, times, control_amplitudes)
+    return problem
+
 if __name__ == "__main__":
+    problem = define_problem()
     solver = GRAPE(optimizer=ScipyLBFGS())
+    solver.solve(problem)
