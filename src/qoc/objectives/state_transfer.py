@@ -1,7 +1,7 @@
 from qutip import Qobj
 
 from qoc.performance.base import PerformanceMeasure
-from qoc.performance.state_fidelity import is_density_matrix
+from qoc.performance.state_fidelity import is_density_matrix, StateFidelity
 from .base import Objective
 
 
@@ -17,7 +17,7 @@ class StateTransfer(Objective):
         self,
         initial: Qobj,
         target: Qobj,
-        performance_measure: PerformanceMeasure,
+        performance_measure: PerformanceMeasure=StateFidelity()
     ):
         _validate_state(initial, "initial")
         _validate_state(target, "target")
