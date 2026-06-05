@@ -4,15 +4,37 @@ from qutip import Qobj, sesolve, mesolve
 class Propagator(ABC):
    
     @abstractmethod
-    def propagate(system: System):
+    def propagate(system: System, **kwargs):  # TODO: maybe the better name would be "compute": Propagator.compute()
         pass
+
+def eigendecomposition(H: Qobj, dt: float) -> np.ndarray:
+    U_j = expm(-1j * H.full() * dt)
+    return U_j
 
 class StepPropagator(Propagator):
 
-    def propagate(system: System):
-        # What is the return type here? For GRAPE
-        return
+    def propagate(system: System, N: int, control_amplitudes, dt: float, **kwargs) -> list:
+        """
+            system : System
+            N : int
+                Number of time slices.
+            dt : float
+                Discretization step.
+            control_amplitudes : np.ndarray
+        """
+        # Dev note: Propagator is meant to be used privately by different solvers, so it can expect parts of optimal control problem definition be passed directly, not wrapped into a container class. Hence our motivation to expand all needed arguments in the signature.
 
+        propagators = [None] * N
+
+        # Build a full system Hamiltonian for time j (remember: controls are time dependent)
+        for j in range(N):
+            step_Hamiltonian = system.build_hamiltonian_time_j(control_amplitudes, j)
+            # Compute a propagator for the jth time slice (corresponds to (j, j + 1) time interval)
+            step_propagator = eigendecomposition(step_Hamiltonian, dt)
+            # Collect a propagator into the list
+            propagators[j] = step_propagator
+
+        return propagators
 
 class FinalStatePropagator(Propagator):
 
