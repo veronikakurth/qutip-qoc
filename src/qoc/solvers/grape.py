@@ -10,6 +10,9 @@ from qoc.dynamics.propagator import StepPropagator
 from qoc.result import Result
 from qoc.objectives.state_transfer import StateTransfer
 
+def adj(A):
+    return np.conj(A).T
+
 class GRAPE(OCPSolver):
 
     def __init__(self, optimizer: Optimizer, max_iter: int = 100, tol: float = 1e-8):
@@ -22,10 +25,11 @@ class GRAPE(OCPSolver):
 
     def solve(self, problem: OptimalControlProblem) -> Result:
         """Main entry point."""
-        system = problem.system
+        system = problem.system.dynamics
         objective = problem.objective
 
         times = problem.times
+        dt = times[-1]/len(times)
 
         u0 = problem.initial_pulses # (K, N)
         K, N = u0.shape
@@ -33,38 +37,32 @@ class GRAPE(OCPSolver):
         def loss_and_grad(u: np.ndarray) -> tuple[float, np.ndarray]:
              
             # Compute step propagators
-            Us = self._propagator.propagate()
+            Us = self._propagator.propagate(system, N, u.reshape(K, N), dt)
             forward_evolution = self._forward_pass(Us, objective.initial)
             co_states = self._backward_pass(Us, objective.target) 
 
             loss = objective.loss(Qobj(forward_evolution[-1]))
-            grad = self._gradient(forward_evolution, co_states, system.dynamics.H_controls, N, dt)
+            grad = self._gradient(forward_evolution, co_states, system.H_controls, N, dt)
 
             return loss, grad
-        
         opt_result = self.optimizer.minimize(loss_and_grad, x0=u0, max_iter=self.max_iter, tol=self.tol)
 
         return Result(optimized_pulses=opt_result.x)
     
     def _forward_pass(self, propagators: list, initial_state: Qobj) -> list:
-        # Returns: propagators and forward evolution
-        propagators = [None] * N
+        # GRAPE's forward pass to compute forward evolution
 
         # forward_evolution = [np.eye(system.shape[0], dtype=complex)] # For gate synthesis
         # We know the size of the array in advance - pre-allocate memory
+        N = len(propagators)
         forward_evolution = [None] * (N + 1)
         forward_evolution[0] = initial_state.full().copy()
 
-        for j in range(N):
-            # Build a full system Hamiltonian for time j (remember: controls are time dependent)
-            slice_Hamiltonian = system.dynamics.build_hamiltonian_time_j(control_amplitudes, j)
-            # Compute a propagator for the jth time slice (corresponds to (j, j + 1) time interval)
-            slice_propagator = eigendecomposition(slice_Hamiltonian, dt)
+        for j, state in enumerate(propagators):
             # Compute forward evolution up to slice j
+            forward_evolution[j + 1] = state @ forward_evolution[j]
 
-            forward_evolution[j + 1] = slice_propagator @ forward_evolution[j]
-
-        return propagators, forward_evolution
+        return forward_evolution
    
     def _backward_pass(self, propagators: list, target_state: Qobj):
         # Propagators must be ordered from U_1 to U_N
@@ -78,7 +76,8 @@ class GRAPE(OCPSolver):
                 sub_co_state = adj(propagators[i]) @ sub_co_state
             co_states[j] = sub_co_state
         return co_states
-
+    
+    # TODO: make it compliant with Scipy's interface on user-passed functions
     def _gradient(self, forward_evolution: list, co_states: list, H_c: list, N: int, dt: float):
         """
         Calculate GRAPE graidents using a so-called adjoint method. It requires previously computed forward and backward pass
@@ -127,8 +126,6 @@ def define_problem():
     # Simulation parameters
     T = 10
     N = 10
-    n_iter = 5 # Algorithm iterations
-    alpha = 0.1 # Gradient step
     times = np.linspace(0, T, N)
     # Initial conditions and target 
     control_amplitudes = np.array([[np.pi for t in times] for i in range(system.dynamics.n_controls)])
@@ -142,4 +139,4 @@ def define_problem():
 if __name__ == "__main__":
     problem = define_problem()
     solver = GRAPE(optimizer=ScipyLBFGS())
-    solver.solve(problem)
+    solver.solve(problem) # TODO: to pass a universal "problem" object, it might make sense to split its arguments in different types of parameters so that its signature definition would not blow up.
