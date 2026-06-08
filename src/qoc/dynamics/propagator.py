@@ -8,7 +8,7 @@ from qoc.systems.base import System
 class Propagator(ABC):
    
     @abstractmethod
-    def propagate(system: System, **kwargs):  # TODO: maybe the better name would be "compute": Propagator.compute()
+    def compute(system: System, **kwargs):  # TODO: maybe the better name would be "compute": Propagator.compute()
         pass
 
 def eigendecomposition(H: Qobj, dt: float) -> np.ndarray:
@@ -17,7 +17,7 @@ def eigendecomposition(H: Qobj, dt: float) -> np.ndarray:
 
 class StepPropagator(Propagator):
 
-    def propagate(self, system: System, N: int, control_amplitudes, dt, **kwargs) -> list:
+    def compute(self, system: System, N: int, control_amplitudes, dt, **kwargs) -> list:
         """
             system : System
             N : int
@@ -41,7 +41,7 @@ class StepPropagator(Propagator):
 
 class FinalStatePropagator(Propagator):
 
-    def propagate(system: System, initial: Qobj, control_amplitudes: np.ndarray, times: np.ndarray) -> Qobj:
+    def compute(system: System, initial: Qobj, control_amplitudes: np.ndarray, times: np.ndarray) -> Qobj:
         """
         Propagate a state or operator under the time-dependent Hamiltonian.
 

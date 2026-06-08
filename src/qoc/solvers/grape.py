@@ -42,7 +42,7 @@ class GRAPE(OCPSolver):
         def loss_and_grad(u: np.ndarray) -> tuple[float, np.ndarray]:
              
             # Compute step propagators
-            Us = self._propagator.propagate(system, N, u.reshape(K, N), dt)
+            Us = self._propagator.compute(system, N, u.reshape(K, N), dt)
             # Compute forward evolution of the system state
             forward_evolution = self._forward_pass(Us, objective.initial)
             # Compute co-states (backpropagation from target)
