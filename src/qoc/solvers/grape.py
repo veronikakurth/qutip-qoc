@@ -29,7 +29,8 @@ class GRAPE(OCPSolver):
         objective = problem.objective
 
         times = problem.times
-        dts = np.diff(times)
+
+        dt = times[-1]/len(times)
 
         u0 = problem.initial_pulses # (K, N)
         K, N = u0.shape
@@ -37,12 +38,12 @@ class GRAPE(OCPSolver):
         def loss_and_grad(u: np.ndarray) -> tuple[float, np.ndarray]:
              
             # Compute step propagators
-            Us = self._propagator.propagate(system, N, u.reshape(K, N), dts)
+            Us = self._propagator.propagate(system, N, u.reshape(K, N), dt)
             forward_evolution = self._forward_pass(Us, objective.initial)
             co_states = self._backward_pass(Us, objective.target) 
 
             loss = float(objective.loss(Qobj(forward_evolution[-1])))
-            grads = self._gradient(forward_evolution, co_states, system.H_controls, N, dts)
+            grads = self._gradient(forward_evolution, co_states, system.H_controls, N, dt)
 
             return loss, grads.ravel()
         
@@ -80,7 +81,7 @@ class GRAPE(OCPSolver):
         return co_states
    
     # TODO: make it compliant with Scipy's interface on user-passed functions
-    def _gradient(self, forward_evolution: list, co_states: list, H_c: list, N: int, dts):
+    def _gradient(self, forward_evolution: list, co_states: list, H_c: list, N: int, dt: float):
         """
         Calculate GRAPE gradients using a so-called adjoint method. It requires previously computed forward and backward pass
         """
@@ -92,8 +93,6 @@ class GRAPE(OCPSolver):
         grads = np.zeros((K, N), dtype=float)
 
         for j in range(N):
-            if j < (N - 1):
-                dt = dts[j]
             psi_j = forward_evolution[j]
             co_state_jp1 = co_states[j + 1]
             for k, Hc in enumerate(H_c_arrays):
@@ -133,7 +132,7 @@ def define_problem():
     
     # Model parameters
     H0 = 0 * sigmaz()
-    H_c = [sigmax() / 2]
+    H_c = [sigmax() / 2, sigmax() / 2]
     system = ControlledSystem('closed', H0=H0, H_controls=H_c)
     # Simulation parameters
     T = 10
