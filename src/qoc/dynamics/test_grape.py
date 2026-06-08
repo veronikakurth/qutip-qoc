@@ -9,9 +9,6 @@ from scipy.linalg import expm
 # Discretize time (is already discretized when a times array is passed)
 # Compute H which is constant on each slice
 
-def eigendecomposition(H: Qobj, dt: float) -> np.ndarray:
-    U_j = expm(-1j * H.full() * dt)
-    return U_j
 
 def eigendecomposition_small_n(H: Qobj, dt: float) -> np.ndarray:
     eigvals, V = np.linalg.eigh(H.full())
@@ -26,53 +23,6 @@ def test_propagators_are_unitary():
     pass
 
 # Computational cycle of GRAPE
-
-def forward_pass(system: ClosedSystem, initial_state: Qobj, control_amplitudes, N, dt) -> list:
-    # Returns: propagators and forward evolution
-    propagators = [None] * N
-
-    # forward_evolution = [np.eye(system.shape[0], dtype=complex)] # For gate synthesis
-    # We know the size of the array in advance - pre-allocate memory
-    forward_evolution = [None] * (N + 1)
-    forward_evolution[0] = initial_state.full().copy()
-
-    for j in range(N):
-        # Build a full system Hamiltonian for time j (remember: controls are time dependent)
-        slice_Hamiltonian = system.build_hamiltonian_time_j(control_amplitudes, j)
-        # Compute a propagator for the jth time slice (corresponds to (j, j + 1) time interval)
-        slice_propagator = eigendecomposition(slice_Hamiltonian, dt)
-        # Collect a propagator into the list
-        propagators[j] = slice_propagator # Compute forward evolution up to slice j
-
-        forward_evolution[j + 1] = slice_propagator @ forward_evolution[j]
-
-    return propagators, forward_evolution
-
-def adj(A):
-    return np.conj(A).T
-
-def backward_pass(propagators: list, target_state: Qobj):
-    # Propagators must be ordered from U_1 to U_N
-    N = len(propagators)
-    co_states = [None] * (N + 1)
-    co_states[N] = target_state.full()
-
-    for j in range(N):
-        sub_co_state = co_states[-1]
-        for i in reversed(range(N, j)):
-            sub_co_state = adj(propagators[i]) @ sub_co_state
-        co_states[j] = sub_co_state
-    return co_states
-
-def grape_gradient(forward_evolution: list, co_states: list, H_c: list, N: int, dt: float):
-    # adjoint method, requires previously computed forward and backward pass
-    grads = np.array([[None for t in range(N)] * len(H_c)])
-    for j in range(N):
-        for k, Hc in enumerate(H_c):
-            control_operator = -1j * Hc * dt
-            grads[k, j] = 2 * np.real(adj(co_states[j]) @ control_operator.full() @ forward_evolution[j - 1])
-    return grads
-
 
 
 def control_update(control_amplitudes, grads, alpha):

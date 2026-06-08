@@ -17,7 +17,7 @@ def eigendecomposition(H: Qobj, dt: float) -> np.ndarray:
 
 class StepPropagator(Propagator):
 
-    def propagate(self, system: System, N: int, control_amplitudes, dt: float, **kwargs) -> list:
+    def propagate(self, system: System, N: int, control_amplitudes, dts, **kwargs) -> list:
         """
             system : System
             N : int
@@ -29,9 +29,10 @@ class StepPropagator(Propagator):
         # Dev note: Propagator is meant to be used privately by different solvers, so it can expect parts of optimal control problem definition be passed directly, not wrapped into a container class. Hence our motivation to expand all needed arguments in the signature.
 
         propagators = [None] * N
-
         # Build a full system Hamiltonian for time j (remember: controls are time dependent)
         for j in range(N):
+            if j < (N - 1):
+                dt = dts[j]
             step_Hamiltonian = system.build_hamiltonian_time_j(control_amplitudes, j)
             # Compute a propagator for the jth time slice (corresponds to (j, j + 1) time interval)
             step_propagator = eigendecomposition(step_Hamiltonian, dt)
