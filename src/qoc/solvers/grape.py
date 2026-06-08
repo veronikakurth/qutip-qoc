@@ -89,7 +89,7 @@ class GRAPE(OCPSolver):
     # TODO: make it compliant with Scipy's interface on user-passed functions
     def _gradient(self, forward_evolution: list, co_states: list, H_c: list, N: int, dt: float):
         """
-        Calculate GRAPE gradients using a so-called adjoint method. It requires previously computed forward and backward pass
+        Calculate GRAPE gradients using a so-called adjoint method. It requires previously computed forward and backward pass.
         """
         K = len(H_c)
         # Expand control Hamiltonian in advance to avoid doing it in a tight loop
@@ -98,13 +98,13 @@ class GRAPE(OCPSolver):
         c = (adj(co_states[-1]) @ forward_evolution[-1]).item() # <phi|psi_N>
 
         grads = np.zeros((K, N), dtype=float)
-
+        # For every slice
         for j in range(N):
             psi_j = forward_evolution[j]
             co_state_jp1 = co_states[j + 1]
             for k, Hc in enumerate(H_c_arrays):
                 inner = (adj(co_state_jp1) @ Hc @ psi_j).item()
-                grads[k, j] = -2.0 * dt * np.imag(np.conj(c) * inner)
+                grads[k, j] = 2.0 * dt * np.real(np.conj(c) * inner)
         return grads
 
 def define_problem():
