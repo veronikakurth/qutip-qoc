@@ -100,33 +100,6 @@ class GRAPE(OCPSolver):
                 grads[k, j] = -2.0 * dt * np.imag(np.conj(c) * inner)
         return grads
 
-    def run(H0, H_c, u, target_state, T, n_iter, alpha):
-        # Basic case: state transfer objective + pure states
-        N = u.shape[1]
-        dt = T/N
-        K = len(H_c)
-
-        for i in range(n_iter):
-            # 1. Do forward pass
-            slice_propagators, forward_evolution = forward_pass(system, initial_state, u, N, dt)
-            # 2. Fidelity
-            current = forward_evolution[N]
-            fidelity = StateFidelity().compute(Qobj(current), Qobj(target_state))
-
-            if fidelity > 1 - 1e-6:
-                print("Converged!")
-                break
-            # 3. Do backward pass
-            co_states = backward_pass(slice_propagators, target_state)
-            # 4. Compute gradients
-            grads = grape_gradient(forward_evolution, co_states, H_c, N, dt)
-            # 5. Update controls
-            updated_controls = control_update(u, grads, 0.1)
-            print(f"Iteration: {i}")
-            print(f"previous controls: \n {control_amplitudes}")
-            print(f"updated controls: \n {updated_controls}")
-        return updated_controls, fidelity
-
 def define_problem():
     # Helper function: Collect problem definition into OCPProblem container
     
