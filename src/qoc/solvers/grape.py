@@ -43,10 +43,12 @@ class GRAPE(OCPSolver):
              
             # Compute step propagators
             Us = self._propagator.propagate(system, N, u.reshape(K, N), dt)
+            # Compute forward evolution of the system state
             forward_evolution = self._forward_pass(Us, objective.initial)
+            # Compute co-states (backpropagation from target)
             co_states = self._backward_pass(Us, objective.target) 
 
-            loss = float(objective.loss(Qobj(forward_evolution[-1])))
+            loss = objective.loss(Qobj(forward_evolution[-1]))
             grads = self._gradient(forward_evolution, co_states, system.H_controls, N, dt)
 
             return loss, grads.ravel()
