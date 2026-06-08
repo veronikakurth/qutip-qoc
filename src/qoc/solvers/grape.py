@@ -13,9 +13,13 @@ from qoc.objectives.state_transfer import StateTransfer
 def adj(A):
     return np.conj(A).T
 
+# The procedure must be compatible with both state transfer and gate synthesis tasks
 class GRAPE(OCPSolver):
 
-    def __init__(self, optimizer: Optimizer, max_iter: int = 100, tol: float = 1e-8):
+    def __init__(self, optimizer: Optimizer | None = None, max_iter: int = 100, tol: float = 1e-8):
+        if optimizer is None:
+            optimizer = ScipyLBFGS()
+
         self.optimizer = optimizer
         self._propagator = StepPropagator()
 
@@ -86,6 +90,7 @@ class GRAPE(OCPSolver):
         Calculate GRAPE gradients using a so-called adjoint method. It requires previously computed forward and backward pass
         """
         K = len(H_c)
+        # Expand control Hamiltonian in advance to avoid doing it in a tight loop
         H_c_arrays = [Hc.full() for Hc in H_c]
         
         c = (adj(co_states[-1]) @ forward_evolution[-1]).item() # <phi|psi_N>
