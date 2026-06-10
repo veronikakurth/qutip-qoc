@@ -5,16 +5,18 @@ from scipy.linalg import expm
 from qutip import Qobj, sesolve, mesolve
 from qoc.systems.base import System
 
+# TODO: think of a better name for the entity, Propagator is too specific for GRAPE
 class Propagator(ABC):
    
     @abstractmethod
-    def compute(system: System, **kwargs):  # TODO: maybe the better name would be "compute": Propagator.compute()
+    def compute(system: System, **kwargs):
         pass
 
 def eigendecomposition(H: Qobj, dt: float) -> np.ndarray:
     U_j = expm(-1j * H.full() * dt)
     return U_j
 
+# TODO: split propagation into single-slice computation (for better testability)
 class StepPropagator(Propagator):
 
     def compute(self, system: System, N: int, control_amplitudes, dt, **kwargs) -> list:
