@@ -43,7 +43,7 @@ class StepPropagator(Propagator):
 
 class FinalStatePropagator(Propagator):
 
-    def compute(system: System, initial: Qobj, control_amplitudes: np.ndarray, times: np.ndarray) -> Qobj:
+    def compute(system: System, initial: Qobj, control_amplitudes: np.ndarray, times: np.ndarray) -> Qobj: #TODO: how about making it possible to pass a solver for dynamics?
         """
         Propagate a state or operator under the time-dependent Hamiltonian.
 
