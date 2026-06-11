@@ -13,7 +13,7 @@ class Result:
     optimized_pulses : np.ndarray
         Control amplitudes after optimisation, shape (n_controls, n_timesteps).
     fidelity : float
-        Achieved fidelity (1 = perfect).
+        Evaluation metric: achieved fidelity (1 = perfect).
     n_iters : int
         Number of iterations until convergence or termination.
     optimizer_info : dict

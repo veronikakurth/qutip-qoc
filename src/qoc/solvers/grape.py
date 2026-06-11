@@ -7,7 +7,7 @@ from qoc.systems.controlled_system import ControlledSystem
 from qoc.optimizers.base import Optimizer, ScipyLBFGS
 from qoc.problem import OptimalControlProblem
 from qoc.dynamics.propagator import StepPropagator
-from qoc.result import Result
+from qoc.solvers.result import Result
 from qoc.objectives.state_transfer import StateTransfer
 
 def adj(A):
@@ -54,9 +54,12 @@ class GRAPE(OCPSolver):
             return loss, grads.ravel()
         
         opt_result = self.optimizer.minimize(loss_and_grad, x0=u0, max_iter=self.max_iter, tol=self.tol)
+        
+        if not opt_result.success:
+            print(f"Warning: optimiser {optimizer} used in GRAPE did not converge. \n Detailed optimiser report: {opt_result}")
 
-        #return Result(optimized_pulses=opt_result.x)
-        return opt_result
+        # return opt_result
+        return Result(optimized_pulses=opt_result.x, fidelity=opt_result.fun, n_iters=opt_result.nit, optimizer_info=opt_result)
     
     def _forward_pass(self, propagators: list, initial_state: Qobj) -> list:
         # GRAPE's forward pass to compute forward evolution
