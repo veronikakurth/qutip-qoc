@@ -17,8 +17,10 @@ class StateTransfer(Objective):
         self,
         initial: Qobj,
         target: Qobj,
-        performance_measure: PerformanceMeasure=StateFidelity()
+        performance_measure: None | PerformanceMeasure = None
     ):
+        if performance_measure is None:
+            performance_measure = StateFidelity()
         _validate_state(initial, "initial")
         _validate_state(target, "target")
         if initial.dims != target.dims:
