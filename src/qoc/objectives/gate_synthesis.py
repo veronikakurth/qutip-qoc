@@ -1,7 +1,7 @@
 from qutip import Qobj
 
 from qoc.performance.base import PerformanceMeasure
-from qoc.performance.gate_fidelity import is_unitary
+from qoc.performance.gate_fidelity import is_unitary, GateFidelity
 from .base import Objective
 
 
@@ -17,8 +17,10 @@ class GateSynthesis(Objective):
         self,
         initial: Qobj,
         target: Qobj,
-        performance_measure: PerformanceMeasure,
+        performance_measure: None | PerformanceMeasure = None
     ):
+        if performance_measure is None:
+            performance_measure = GateFidelity()
         _validate_operator(initial, "initial")
         _validate_operator(target, "target")
         if initial.dims != target.dims:
