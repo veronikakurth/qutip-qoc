@@ -59,7 +59,7 @@ class GRAPE(OCPSolver):
             print(f"Warning: optimiser {optimizer} used in GRAPE did not converge. \n Detailed optimiser report: {opt_result}")
 
         # return opt_result
-        return Result(optimized_pulses=opt_result.x, fidelity=opt_result.fun, n_iters=opt_result.nit, optimizer_info=opt_result)
+        return Result(optimized_pulses=opt_result.x, fidelity=1 - opt_result.fun, n_iters=opt_result.nit, optimizer_info=opt_result)
     
     def _forward_pass(self, propagators: list, initial_state: Qobj) -> list:
         # GRAPE's forward pass to compute forward evolution
@@ -82,11 +82,9 @@ class GRAPE(OCPSolver):
         co_states = [None] * (N + 1)
         co_states[N] = target_state.full()
 
-        for j in range(N):
-            sub_co_state = co_states[-1]
-            for i in reversed(range(N, j)):
-                sub_co_state = adj(propagators[i]) @ sub_co_state
-            co_states[j] = sub_co_state
+        for j in reversed(range(N)):
+            co_states[j] = adj(propagators[j]) @ co_states[j + 1]
+
         return co_states
    
     # TODO: make it compliant with Scipy's interface on user-passed functions
