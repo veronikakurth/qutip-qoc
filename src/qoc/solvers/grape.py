@@ -34,7 +34,7 @@ class GRAPE(OCPSolver):
 
         times = problem.times
 
-        dt = times[-1]/len(times)
+        dt = times[1] - times[0]
 
         u0 = problem.initial_pulses # (K, N)
         K, N = u0.shape
@@ -50,13 +50,14 @@ class GRAPE(OCPSolver):
 
             loss = objective.loss(Qobj(forward_evolution[-1]))
             grads = self._gradient(forward_evolution, co_states, system.H_controls, N, dt)
+            print(f"loss={loss:.6f}  fidelity={1-loss:.6f}")
 
             return loss, grads.ravel()
         
         opt_result = self.optimizer.minimize(loss_and_grad, x0=u0, max_iter=self.max_iter, tol=self.tol)
         
         if not opt_result.success:
-            print(f"Warning: optimiser {optimizer} used in GRAPE did not converge. \n Detailed optimiser report: {opt_result}")
+            print(f"Warning: optimiser {self.optimizer} used in GRAPE did not converge. \n Detailed optimiser report: {opt_result}")
 
         # return opt_result
         return Result(optimized_pulses=opt_result.x, fidelity=1 - opt_result.fun, n_iters=opt_result.nit, optimizer_info=opt_result)
@@ -105,7 +106,7 @@ class GRAPE(OCPSolver):
             co_state_jp1 = co_states[j + 1]
             for k, Hc in enumerate(H_c_arrays):
                 inner = (adj(co_state_jp1) @ Hc @ psi_j).item()
-                grads[k, j] = 2.0 * dt * np.real(np.conj(c) * inner)
+                grads[k, j] = -2.0 * dt * np.imag(np.conj(c) * inner)
         return grads
 
 def define_problem():
