@@ -9,7 +9,7 @@ from typing import Literal
 class ControlledSystem:
     # TODO: the constructor is not user-friendly at the moment: no type hinting for system parameters. Shall we at least add controllable/non-controllable part of dynamics
     # TODO: how to give hints for 'kind'?
-    def __init__(self, kind: Literal["closed", "open"], H0: Qobj, H_controls: list[Qobj], **system_params):
+    def __init__(self, H0: Qobj, H_controls: list[Qobj], kind: Literal["closed", "open"], **system_params):
         self.dynamics = SystemFactory.create(kind, {"H0": H0, "H_controls": H_controls} | system_params)
 
 # Factory class: decides on exact implementation of System based on "kind" parameter
