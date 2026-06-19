@@ -1,7 +1,7 @@
 import numpy as np
 from qutip import Qobj, basis, sigmax, sigmaz
 
-from qoc.solvers.base import OCPSolver
+from qoc.solvers.base import Algorithm
 from qoc.systems.base import System
 from qoc.systems.controlled_system import ControlledSystem
 from qoc.optimizers.base import Optimizer, ScipyLBFGS
@@ -14,7 +14,7 @@ def adj(A):
     return np.conj(A).T
 
 # The procedure must be compatible with both state transfer and gate synthesis tasks
-class GRAPE(OCPSolver):
+class GRAPE(Algorithm):
 
     def __init__(self, optimizer: Optimizer | None = None, max_iter: int = 100, tol: float = 1e-8):
         if optimizer is None:
@@ -27,7 +27,7 @@ class GRAPE(OCPSolver):
         self.tol = tol
 
 
-    def solve(self, problem: OptimalControlProblem) -> Result:
+    def solve(self, problem: OptimalControlProblem, callback=None) -> Result:
         """Main entry point."""
         system = problem.system.dynamics
         objective = problem.objective
@@ -38,6 +38,8 @@ class GRAPE(OCPSolver):
 
         u0 = problem.initial_pulses # (K, N)
         K, N = u0.shape
+
+        history = []
 
         def loss_and_grad(u: np.ndarray) -> tuple[float, np.ndarray]:
              
@@ -50,7 +52,11 @@ class GRAPE(OCPSolver):
 
             loss = objective.loss(Qobj(forward_evolution[-1]))
             grads = self._gradient(forward_evolution, co_states, system.H_controls, N, dt)
-            print(f"loss={loss:.6f}  fidelity={1-loss:.6f}")
+            
+            history.append(1 - loss)
+            if callback is not None:
+                callback(u, loss)
+            # print(f"loss={loss:.6f}  fidelity={1-loss:.6f}")
 
             return loss, grads.ravel()
         
@@ -60,7 +66,7 @@ class GRAPE(OCPSolver):
             print(f"Warning: optimiser {self.optimizer} used in GRAPE did not converge. \n Detailed optimiser report: {opt_result}")
 
         # return opt_result
-        return Result(optimized_pulses=opt_result.x, fidelity=1 - opt_result.fun, n_iters=opt_result.nit, optimizer_info=opt_result)
+        return Result(optimized_pulses=opt_result.x, fidelity=1 - opt_result.fun, n_iters=opt_result.nit, optimizer_info=opt_result, history=history)
     
     def _forward_pass(self, propagators: list, initial_state: Qobj) -> list:
         # GRAPE's forward pass to compute forward evolution

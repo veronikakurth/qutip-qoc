@@ -18,9 +18,12 @@ class Result:
         Number of iterations until convergence or termination.
     optimizer_info : dict
         Optimizer-specific metadata (convergence message, etc.).
+    history : list of float
+        History of fidelity values per iteration of optimisation procedure.
     """
 
     optimized_pulses: np.ndarray
     fidelity: float
     n_iters: int
     optimizer_info: dict
+    history: list[float]
