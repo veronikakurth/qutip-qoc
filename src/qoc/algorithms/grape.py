@@ -1,17 +1,27 @@
 import numpy as np
 from qutip import Qobj, basis, sigmax, sigmaz
+from scipy.linalg import expm
 
-from qoc.solvers.base import Algorithm
+from qoc.algorithms.base import Algorithm
 from qoc.systems.base import System
 from qoc.systems.controlled_system import ControlledSystem
 from qoc.optimizers.base import Optimizer, ScipyLBFGS
 from qoc.problem import OptimalControlProblem
-from qoc.dynamics.propagator import StepPropagator
-from qoc.solvers.result import Result
+from qoc.algorithms.result import Result
 from qoc.objectives.state_transfer import StateTransfer
 
 def adj(A):
     return np.conj(A).T
+
+
+def _step_propagators(system: System, control_amplitudes: np.ndarray, dt: float) -> list:
+    """Per-slice unitaries U_j = expm(-i H_j dt) for piecewise-constant controls."""
+    N = control_amplitudes.shape[1]
+    propagators = [None] * N
+    for j in range(N):
+        H_j = system.build_hamiltonian_time_j(control_amplitudes, j)
+        propagators[j] = expm(-1j * H_j.full() * dt)
+    return propagators
 
 # The procedure must be compatible with both state transfer and gate synthesis tasks
 class GRAPE(Algorithm):
@@ -21,7 +31,6 @@ class GRAPE(Algorithm):
             optimizer = ScipyLBFGS()
 
         self.optimizer = optimizer
-        self._propagator = StepPropagator()
 
         self.max_iter = max_iter
         self.tol = tol
@@ -44,7 +53,7 @@ class GRAPE(Algorithm):
         def loss_and_grad(u: np.ndarray) -> tuple[float, np.ndarray]:
              
             # Compute step propagators
-            Us = self._propagator.compute(system, N, u.reshape(K, N), dt)
+            Us = _step_propagators(system, u.reshape(K, N), dt)
             # Compute forward evolution of the system state
             forward_evolution = self._forward_pass(Us, objective.initial)
             # Compute co-states (backpropagation from target)
