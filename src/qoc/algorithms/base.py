@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 from qoc.problem import OptimalControlProblem
-from qoc.solvers.result import Result
+from qoc.algorithms.result import Result
 
 class Algorithm(ABC):
     
