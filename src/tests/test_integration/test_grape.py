@@ -1,11 +1,11 @@
 import pytest
 import numpy as np
 import qutip
-from qoc.solvers.grape import GRAPE, adj
+import matplotlib.pyplot as plt
+from qoc.algorithms.grape import GRAPE, adj
 from qoc.systems.controlled_system import ControlledSystem
 from qoc.problem import OptimalControlProblem
 from qoc.objectives import StateTransfer
-from qoc.dynamics.propagator import StepPropagator
 
 @pytest.fixture
 def x_closed_system():
@@ -33,3 +33,7 @@ def test_state_transfer_single_qubit(x_closed_system):
     pulse_area = np.sum(result.optimized_pulses) * dt
     reduced = (pulse_area + np.pi) % (2*np.pi) - np.pi # reduce to (-pi, pi]
     assert np.isclose(abs(reduced), np.pi/2, atol=1e-2)
+    plt.plot(result.history)
+    plt.xlabel("iterations")
+    plt.ylabel("fidelity")
+    plt.show()
