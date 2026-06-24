@@ -3,12 +3,15 @@ from qutip import Qobj, basis, sigmax, sigmaz
 from scipy.linalg import expm
 
 from qoc.algorithms.base import Algorithm
-from qoc.systems.base import System
-from qoc.systems.controlled_system import ControlledSystem
-from qoc.optimizers.base import Optimizer, ScipyLBFGS
-from qoc.problem import OptimalControlProblem
 from qoc.algorithms.result import Result
 from qoc.objectives.state_transfer import StateTransfer
+from qoc.optimizers.base import Optimizer, ScipyLBFGS
+from qoc.problem import OptimalControlProblem
+from qoc.pulse.base import PulseParameterization
+from qoc.pulse.parameterizations import PiecewiseConstant
+from qoc.systems.base import System
+from qoc.systems.controlled_system import ControlledSystem
+
 
 def adj(A):
     return np.conj(A).T
@@ -23,96 +26,111 @@ def _step_propagators(system: System, control_amplitudes: np.ndarray, dt: float)
         propagators[j] = expm(-1j * H_j.full() * dt)
     return propagators
 
+
 # The procedure must be compatible with both state transfer and gate synthesis tasks
 class GRAPE(Algorithm):
 
-    def __init__(self, optimizer: Optimizer | None = None, max_iter: int = 100, tol: float = 1e-8):
+    def __init__(
+        self,
+        parameterization: PulseParameterization | None = None,
+        optimizer: Optimizer | None = None,
+        max_iter: int = 100,
+        tol: float = 1e-8,
+    ):
         super().__init__(simulator=None)  # GRAPE uses _step_propagators, not a Simulator
+        self.parameterization = parameterization  # None -> infer PiecewiseConstant at solve time
         self.optimizer = optimizer or ScipyLBFGS()
         self.max_iter = max_iter
         self.tol = tol
-
 
     def solve(self, problem: OptimalControlProblem, callback=None) -> Result:
         """Main entry point."""
         system = problem.system.dynamics
         objective = problem.objective
-
         times = problem.times
-
         dt = times[1] - times[0]
 
-        u0 = problem.initial_pulses # (K, N)
-        K, N = u0.shape
+        K = system.n_controls
+        N = len(times)
+        param = self.parameterization or PiecewiseConstant(K, N)
+
+        if not isinstance(param, PiecewiseConstant):
+            # GRAPE's analytic gradient is wrt amplitudes; a non-identity
+            # parameterization would require chaining through amplitude_jacobian.
+            # Not yet implemented.
+            raise NotImplementedError(
+                f"GRAPE currently supports only PiecewiseConstant parameterization, "
+                f"got {type(param).__name__}"
+            )
+
+        theta0 = problem.initial_parameters
+        if theta0.size != param.n_parameters:
+            raise ValueError(
+                f"initial_parameters has size {theta0.size}, parameterization "
+                f"expects {param.n_parameters}"
+            )
 
         history = []
 
-        def loss_and_grad(u: np.ndarray) -> tuple[float, np.ndarray]:
-             
-            # Compute step propagators
-            Us = _step_propagators(system, u.reshape(K, N), dt)
-            # Compute forward evolution of the system state
+        def loss_and_grad(theta: np.ndarray) -> tuple[float, np.ndarray]:
+            u = param.to_amplitudes(theta, times)  # (K, N)
+
+            Us = _step_propagators(system, u, dt)
             forward_evolution = self._forward_pass(Us, objective.initial)
-            # Compute co-states (backpropagation from target)
-            co_states = self._backward_pass(Us, objective.target) 
+            co_states = self._backward_pass(Us, objective.target)
 
             loss = objective.loss(Qobj(forward_evolution[-1]))
             grads = self._gradient(forward_evolution, co_states, system.H_controls, N, dt)
-            
+
             history.append(1 - loss)
             if callback is not None:
-                callback(u, loss)
-            # print(f"loss={loss:.6f}  fidelity={1-loss:.6f}")
+                callback(theta, loss)
 
+            # For PiecewiseConstant, dL/dtheta == dL/du flattened (Jacobian is identity).
             return loss, grads.ravel()
-        
-        opt_result = self.optimizer.minimize(loss_and_grad, x0=u0, max_iter=self.max_iter, tol=self.tol)
-        
+
+        opt_result = self.optimizer.minimize(
+            loss_and_grad, x0=theta0, max_iter=self.max_iter, tol=self.tol
+        )
+
         if not opt_result.success:
-            print(f"Warning: optimiser {self.optimizer} used in GRAPE did not converge. \n Detailed optimiser report: {opt_result}")
+            print(
+                f"Warning: optimiser {self.optimizer} used in GRAPE did not converge. \n"
+                f" Detailed optimiser report: {opt_result}"
+            )
 
-        # return opt_result
-        return Result(optimized_pulses=opt_result.x, fidelity=1 - opt_result.fun, n_iters=opt_result.nit, optimizer_info=opt_result, history=history)
-    
+        optimized_pulses = param.to_amplitudes(opt_result.x, times)
+        return Result(
+            optimized_pulses=optimized_pulses,
+            fidelity=1 - opt_result.fun,
+            n_iters=opt_result.nit,
+            optimizer_info=opt_result,
+            history=history,
+        )
+
     def _forward_pass(self, propagators: list, initial_state: Qobj) -> list:
-        # GRAPE's forward pass to compute forward evolution
-
-        # forward_evolution = [np.eye(system.shape[0], dtype=complex)] # For gate synthesis
-        # We know the size of the array in advance - pre-allocate memory
         N = len(propagators)
         forward_evolution = [None] * (N + 1)
         forward_evolution[0] = initial_state.full().copy()
-
-        for j, state in enumerate(propagators):
-            # Compute forward evolution up to slice j
-            forward_evolution[j + 1] = state @ forward_evolution[j]
-
+        for j, U in enumerate(propagators):
+            forward_evolution[j + 1] = U @ forward_evolution[j]
         return forward_evolution
-   
+
     def _backward_pass(self, propagators: list, target_state: Qobj):
-        # Propagators must be ordered from U_1 to U_N
         N = len(propagators)
         co_states = [None] * (N + 1)
         co_states[N] = target_state.full()
-
         for j in reversed(range(N)):
             co_states[j] = adj(propagators[j]) @ co_states[j + 1]
-
         return co_states
-   
-    # TODO: make it compliant with Scipy's interface on user-passed functions
+
     def _gradient(self, forward_evolution: list, co_states: list, H_c: list, N: int, dt: float):
-        """
-        Calculate GRAPE gradients using a so-called adjoint method. It requires previously computed forward and backward pass.
-        """
+        """Adjoint-method gradient. Requires forward + backward passes."""
         K = len(H_c)
-        # Expand control Hamiltonian in advance to avoid doing it in a tight loop
         H_c_arrays = [Hc.full() for Hc in H_c]
-        
-        c = (adj(co_states[-1]) @ forward_evolution[-1]).item() # <phi|psi_N>
+        c = (adj(co_states[-1]) @ forward_evolution[-1]).item()  # <phi|psi_N>
 
         grads = np.zeros((K, N), dtype=float)
-        # For every slice
         for j in range(N):
             psi_j = forward_evolution[j]
             co_state_jp1 = co_states[j + 1]
@@ -121,30 +139,29 @@ class GRAPE(Algorithm):
                 grads[k, j] = -2.0 * dt * np.imag(np.conj(c) * inner)
         return grads
 
+
 def define_problem():
-    # Helper function: Collect problem definition into OCPProblem container
-    
-    # Model parameters
     H0 = 0 * sigmaz()
     H_c = [sigmax() / 2, sigmax() / 2]
-    system = ControlledSystem('closed', H0=H0, H_controls=H_c)
-    # Simulation parameters
+    system = ControlledSystem(H0=H0, H_controls=H_c, kind='closed')
+
     T = 10
     N = 10
     times = np.linspace(0, T, N)
-    # TODO: calculating multiple dts would allow for non-uniform discretization
-    print(f"np.diff(times): {np.diff(times)}")
-    # Initial conditions and target 
-    control_amplitudes = np.array([[np.pi for t in times] for i in range(system.dynamics.n_controls)])
+    K = system.dynamics.n_controls
+
+    amplitudes = np.full((K, N), np.pi)
+    param = PiecewiseConstant(K, N)
+    theta0 = param.initial_theta(amplitudes)
+
     initial_state = basis(2, 0)
     target_state = basis(2, 1)
-    # Choose performance measure and aggregate it with initial conditions and target into a objective -> verify the objective is consistent
     objective = StateTransfer(initial_state, target_state)
-    problem = OptimalControlProblem(system, objective, times, control_amplitudes)
-    return problem
+    return OptimalControlProblem(system, objective, times, theta0)
+
 
 if __name__ == "__main__":
     problem = define_problem()
     solver = GRAPE(optimizer=ScipyLBFGS())
-    result = solver.solve(problem) # TODO: to pass a universal "problem" object, it might make sense to split its arguments in different types of parameters so that its signature definition would not blow up.
+    result = solver.solve(problem)
     print(result)
