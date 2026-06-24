@@ -17,6 +17,10 @@ class PiecewiseConstant(PulseParameterization):
         Number of control channels K.
     n_timesteps : int
         Number of time slices N (must match len(times) at call time).
+    amplitude_range : tuple[float | None, float | None] | None, optional
+        Shared (min, max) bounds applied to every amplitude. Use ``None`` on
+        either side to leave that direction unbounded. Default ``None`` means
+        the controls are fully unconstrained.
 
     Attributes
     ----------
@@ -24,13 +28,24 @@ class PiecewiseConstant(PulseParameterization):
         K * N — the size of theta.
     """
 
-    def __init__(self, n_controls: int, n_timesteps: int):
+    def __init__(
+        self,
+        n_controls: int,
+        n_timesteps: int,
+        amplitude_range: tuple[float | None, float | None] | None = None,
+    ):
         self.n_controls = n_controls
         self.n_timesteps = n_timesteps
+        self.amplitude_range = amplitude_range
 
     @property
     def n_parameters(self) -> int:
         return self.n_controls * self.n_timesteps
+
+    def bounds(self) -> list[tuple[float | None, float | None]] | None:
+        if self.amplitude_range is None:
+            return None
+        return [self.amplitude_range] * self.n_parameters
 
     def to_amplitudes(self, theta: np.ndarray, times: np.ndarray) -> np.ndarray:
         """Reshape theta into a (n_controls, n_timesteps) amplitude array.

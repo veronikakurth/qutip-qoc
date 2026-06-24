@@ -40,8 +40,14 @@ class PulseParameterization(ABC):
         """
         return None
 
-    def bounds(self) -> list[tuple[float, float]] | None:
-        """Per-parameter bounds for constrained optimizers (None = unbounded)."""
+    def bounds(self) -> list[tuple[float | None, float | None]] | None:
+        """Per-parameter bounds for constrained optimizers.
+
+        Returns one ``(min, max)`` pair per entry of theta. Use ``None`` on
+        either side of a pair to leave that direction unbounded. The whole
+        return value being ``None`` means the parameterization is fully
+        unconstrained.
+        """
         return None
 
     @abstractmethod
