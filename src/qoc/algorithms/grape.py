@@ -27,11 +27,8 @@ def _step_propagators(system: System, control_amplitudes: np.ndarray, dt: float)
 class GRAPE(Algorithm):
 
     def __init__(self, optimizer: Optimizer | None = None, max_iter: int = 100, tol: float = 1e-8):
-        if optimizer is None:
-            optimizer = ScipyLBFGS()
-
-        self.optimizer = optimizer
-
+        super().__init__(simulator=None)  # GRAPE uses _step_propagators, not a Simulator
+        self.optimizer = optimizer or ScipyLBFGS()
         self.max_iter = max_iter
         self.tol = tol
 
