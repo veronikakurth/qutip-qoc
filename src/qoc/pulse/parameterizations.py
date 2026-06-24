@@ -7,7 +7,7 @@ class PiecewiseConstant(PulseParameterization):
     """Piecewise-constant amplitudes on a fixed time grid.
 
     The parameter vector theta is interpreted directly as a (n_controls,
-    n_timesteps) amplitude array — the parameterization is an identity
+    n_timesteps) amplitude array - the parameterization is an identity
     reshape. This is GRAPE's native form: every time slice carries one
     independently-tuned amplitude per control.
 
