@@ -9,7 +9,7 @@ from qoc.objectives import StateTransfer
 
 @pytest.fixture
 def x_closed_system():
-    return ControlledSystem('closed', H0=0 * qutip.sigmax(), H_controls=[qutip.sigmax()])
+    return ControlledSystem(H0=0 * qutip.sigmax(), H_controls=[qutip.sigmax()], kind='closed')
 
 def test_state_transfer_single_qubit(x_closed_system):
     # Testing GRAPE for a state transfer on a single qubit for which
