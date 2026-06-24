@@ -90,7 +90,11 @@ class GRAPE(Algorithm):
             return loss, grads.ravel()
 
         opt_result = self.optimizer.minimize(
-            loss_and_grad, x0=theta0, max_iter=self.max_iter, tol=self.tol
+            loss_and_grad,
+            x0=theta0,
+            max_iter=self.max_iter,
+            tol=self.tol,
+            bounds=param.bounds(),
         )
 
         if not opt_result.success:
