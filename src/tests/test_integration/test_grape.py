@@ -42,3 +42,34 @@ def test_state_transfer_single_qubit(x_closed_system):
     plt.xlabel("iterations")
     plt.ylabel("fidelity")
     plt.show()
+
+
+def test_amplitude_bounds_are_enforced(x_closed_system):
+    """With a tight amplitude_range, no optimized amplitude exceeds the bound
+    and the bound is saturated somewhere (otherwise the test is vacuous)."""
+    system = x_closed_system
+    T = 10
+    N = 10
+    times = np.linspace(0, T, N, endpoint=False)
+    np.random.seed(0)
+
+    K = system.dynamics.n_controls
+    # Unconstrained optimum amplitude for a pi-pulse is ~pi/T ~= 0.314 — set
+    # a tight bound below that so the optimizer is forced into saturation.
+    bound = 0.05
+    # Non-zero initial guess: the loss landscape has a saddle at u=0 because
+    # <target|psi(T)> = 0 makes the adjoint gradient vanish there.
+    initial_pulse = np.random.uniform(-0.01, 0.01, (K, N))
+    param = PiecewiseConstant(K, N, amplitude_range=(-bound, bound))
+    theta0 = param.initial_theta(initial_pulse)
+
+    objective = StateTransfer(qutip.basis(2, 0), qutip.basis(2, 1))
+    problem = OptimalControlProblem(system, objective, times, theta0)
+    result = GRAPE(parameterization=param).solve(problem)
+
+    u = result.optimized_pulses
+    assert np.all(u <= bound + 1e-10), f"upper bound violated: max={u.max()}"
+    assert np.all(u >= -bound - 1e-10), f"lower bound violated: min={u.min()}"
+    assert np.max(np.abs(u)) >= bound - 1e-6, (
+        "bound was never saturated — test is vacuous, the bound is too loose"
+    )
