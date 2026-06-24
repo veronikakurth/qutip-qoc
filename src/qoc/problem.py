@@ -6,10 +6,12 @@ from qoc.objectives.base import Objective
 
 class OptimalControlProblem:
     """
-    Full description of an OCP: what system, what goal, over what time, starting from what pulse guess.
+    Full description of an OCP: what system, what goal, over what time, starting from what parameter guess.
 
-    This is the central validation point where all inputs are checked before
-    being handed to a solver.
+    `initial_parameters` is a 1-D vector in the parameterization chosen by the
+    algorithm (e.g. flattened amplitudes for piecewise-constant, basis
+    coefficients for Fourier). Algorithms validate its length against their
+    PulseParameterization.n_parameters at solve time.
     """
 
     def __init__(
@@ -17,7 +19,7 @@ class OptimalControlProblem:
         system: ControlledSystem,
         objective: Objective,
         times: np.ndarray,
-        initial_pulses: np.ndarray, # TODO: can be also initial pulse parameters - make the argument more general
+        initial_parameters: np.ndarray,
     ):
         """
         Parameters
@@ -28,17 +30,19 @@ class OptimalControlProblem:
             Defines target and figure of merit.
         times : np.ndarray
             Time grid, shape (n_timesteps,).
-        initial_pulses : np.ndarray
-            Initial guess for control amplitudes, shape (n_controls, n_timesteps).
+        initial_parameters : np.ndarray
+            1-D initial guess in the algorithm's parameterization. For
+            piecewise-constant control, use
+            ``PiecewiseConstant(K, N).initial_theta(amplitudes_2d)``.
         """
-        self._validate(system, objective, times, initial_pulses)
+        self._validate(system, objective, times, initial_parameters)
         self.system = system
         self.objective = objective
         self.times = times
-        self.initial_pulses = initial_pulses
+        self.initial_parameters = np.asarray(initial_parameters).ravel()
 
     @staticmethod
-    def _validate(system, objective, times, initial_pulses):
+    def _validate(system, objective, times, initial_parameters):
         if not isinstance(system, ControlledSystem):
             raise TypeError(f"system must be a ControlledSystem, got {type(system)}")
         if not isinstance(objective, Objective):
@@ -50,11 +54,6 @@ class OptimalControlProblem:
         if not np.all(np.diff(times) > 0):
             raise ValueError("times must be strictly increasing")
 
-        initial_pulses = np.asarray(initial_pulses)
-        if initial_pulses.ndim != 2:
-            raise ValueError("initial_pulses must be 2D with shape (n_controls, n_timesteps)")
-        if initial_pulses.shape[1] != len(times):
-            raise ValueError(
-                f"initial_pulses has {initial_pulses.shape[1]} timesteps "
-                f"but times has {len(times)}"
-            )
+        initial_parameters = np.asarray(initial_parameters)
+        if initial_parameters.size == 0:
+            raise ValueError("initial_parameters must be non-empty")
