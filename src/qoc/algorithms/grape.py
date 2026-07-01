@@ -55,9 +55,6 @@ class GRAPE(Algorithm):
         param = self.parameterization or PiecewiseConstant(K, N)
 
         if not isinstance(param, PiecewiseConstant):
-            # GRAPE's analytic gradient is wrt amplitudes; a non-identity
-            # parameterization would require chaining through amplitude_jacobian.
-            # Not yet implemented.
             raise NotImplementedError(
                 f"GRAPE currently supports only PiecewiseConstant parameterization, "
                 f"got {type(param).__name__}"
@@ -74,7 +71,7 @@ class GRAPE(Algorithm):
 
         def loss_and_grad(theta: np.ndarray) -> tuple[float, np.ndarray]:
             u = param.to_amplitudes(theta, times)  # (K, N)
-
+            # GRAPE-specific steps
             Us = _step_propagators(system, u, dt)
             forward_evolution = self._forward_pass(Us, objective.initial)
             co_states = self._backward_pass(Us, objective.target)
