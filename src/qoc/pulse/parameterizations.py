@@ -6,26 +6,24 @@ from qoc.pulse.base import PulseParameterization
 class PiecewiseConstant(PulseParameterization):
     """Piecewise-constant amplitudes on a fixed time grid.
 
-    The parameter vector theta is interpreted directly as a (n_controls,
-    n_timesteps) amplitude array - the parameterization is an identity
-    reshape. This is GRAPE's native form: every time slice carries one
-    independently-tuned amplitude per control.
+    The parameter vector theta is (n_controls, n_timesteps) amplitude array.
+    Main use: in GRAPE, where every time slice carries one independently-tuned amplitude per control.
 
     Parameters
     ----------
     n_controls : int
-        Number of control channels K.
+        Number of controls.
     n_timesteps : int
         Number of time slices N (must match len(times) at call time).
     amplitude_range : tuple[float | None, float | None] | None, optional
-        Shared (min, max) bounds applied to every amplitude. Use ``None`` on
+        (min, max) bounds applied to every amplitude. Use ``None`` on
         either side to leave that direction unbounded. Default ``None`` means
         the controls are fully unconstrained.
 
     Attributes
     ----------
     n_parameters : int
-        K * N — the size of theta.
+        K * N - the size of theta, parameter vector.
     """
 
     def __init__(
@@ -61,13 +59,8 @@ class PiecewiseConstant(PulseParameterization):
         return np.asarray(theta).reshape(self.n_controls, self.n_timesteps)
 
     def amplitude_jacobian(self, theta: np.ndarray, times: np.ndarray) -> np.ndarray:
-        """Dense identity Jacobian, shape (K, N, K*N).
-
-        du[k, j] / dtheta[k', j'] = delta_{kk'} delta_{jj'}. Returned in dense
-        form for interface uniformity with non-trivial parameterizations;
-        hot-loop callers should special-case the identity rather than
-        materializing this.
-        """
+        """Dense identity Jacobian, shape (K, N, K*N)."""
+        # TODO: returned in a dense form (numpy array) - can we do better?
         K, N = self.n_controls, self.n_timesteps
         J = np.zeros((K, N, K * N))
         for k in range(K):

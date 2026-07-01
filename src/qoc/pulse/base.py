@@ -24,28 +24,19 @@ class PulseParameterization(ABC):
     def amplitude_jacobian(
         self, theta: np.ndarray, times: np.ndarray
     ) -> np.ndarray | None:
-        """Return du/dtheta with shape (n_controls, len(times), n_parameters).
-
-        Default None: algorithms that need analytic Jacobians must fall back
-        to finite differences or raise.
-        """
+        """Return du/dtheta with shape (n_controls, len(times), n_parameters)."""
         return None
 
     def to_callable(self, theta: np.ndarray) -> Callable[[float], np.ndarray] | None:
-        """Return a callable t -> amplitudes(t) of shape (n_controls,).
-
-        Optional: required by algorithms (e.g. GOAT) that integrate the
-        equation of motion with an analytic control profile rather than
-        sampling on a fixed time grid. Default None means "not supported".
-        """
+        """Return a callable t -> amplitudes(t) of shape (n_controls,)."""
         return None
 
-    def bounds(self) -> list[tuple[float | None, float | None]] | None:
+    def bounds(self) -> list | None:
         """Per-parameter bounds for constrained optimizers.
 
         Returns one ``(min, max)`` pair per entry of theta. Use ``None`` on
-        either side of a pair to leave that direction unbounded. The whole
-        return value being ``None`` means the parameterization is fully
+        either side of a pair to leave that direction unbounded. 
+        If the whole return value is ``None`` -> the parameterization is fully
         unconstrained.
         """
         return None
