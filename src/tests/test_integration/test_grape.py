@@ -18,22 +18,21 @@ def test_state_transfer_single_qubit(x_closed_system):
     system = x_closed_system
     T = 10 
     N = 10
-    dt = T / N
     times = np.linspace(0, T, N, endpoint=False)
     np.random.seed(0)
 
     K = system.dynamics.n_controls
     initial_pulse = np.random.uniform(-0.1, 0.1, (K, N))
-    param = PiecewiseConstant(K, N)
-    theta0 = param.initial_theta(initial_pulse)
+    param = PiecewiseConstant(K, times=times)
+    dt = param.dt
 
     initial_state = qutip.basis(2, 0)
     target_state = qutip.basis(2, 1)
     # By default, state fidelity is used as a performance measure in a state transfer task
     objective = StateTransfer(initial_state, target_state)
-    control_problem = OptimalControlProblem(system, objective, times, theta0)
+    control_problem = OptimalControlProblem(system, objective)
     algorithm = GRAPE(parameterization=param)
-    result = algorithm.solve(control_problem)
+    result = algorithm.solve(control_problem, initial_amplitudes=initial_pulse)
     assert result.fidelity > 1.0 - 1e-4
     pulse_area = np.sum(result.optimized_pulses) * dt
     reduced = (pulse_area + np.pi) % (2*np.pi) - np.pi # reduce to (-pi, pi]
@@ -50,7 +49,6 @@ def test_amplitude_bounds_are_enforced(x_closed_system):
     system = x_closed_system
     T = 10
     N = 10
-    times = np.linspace(0, T, N, endpoint=False)
     np.random.seed(0)
 
     K = system.dynamics.n_controls
@@ -60,12 +58,11 @@ def test_amplitude_bounds_are_enforced(x_closed_system):
     # Non-zero initial guess: the loss landscape has a saddle at u=0 because
     # <target|psi(T)> = 0 makes the adjoint gradient vanish there.
     initial_pulse = np.random.uniform(-0.01, 0.01, (K, N))
-    param = PiecewiseConstant(K, N, amplitude_range=(-bound, bound))
-    theta0 = param.initial_theta(initial_pulse)
+    param = PiecewiseConstant(K, T, N, amplitude_range=(-bound, bound))
 
     objective = StateTransfer(qutip.basis(2, 0), qutip.basis(2, 1))
-    problem = OptimalControlProblem(system, objective, times, theta0)
-    result = GRAPE(parameterization=param).solve(problem)
+    problem = OptimalControlProblem(system, objective)
+    result = GRAPE(parameterization=param).solve(problem, initial_amplitudes=initial_pulse)
 
     u = result.optimized_pulses
     assert np.all(u <= bound + 1e-10), f"upper bound violated: max={u.max()}"
