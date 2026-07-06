@@ -22,7 +22,7 @@ def _step_propagators(system: System, control_amplitudes: np.ndarray, dt: float)
     N = control_amplitudes.shape[1]
     propagators = [None] * N
     for j in range(N):
-        H_j = system.build_hamiltonian_time_j(control_amplitudes, j)
+        H_j = system.build_generator_time_j(control_amplitudes, j)
         propagators[j] = expm(-1j * H_j.full() * dt)
     return propagators
 
@@ -32,35 +32,30 @@ class GRAPE(Algorithm):
 
     def __init__(
         self,
-        parameterization: PulseParameterization | None = None,
+        parameterization: PulseParameterization,
         optimizer: Optimizer | None = None,
         max_iter: int = 100,
         tol: float = 1e-8,
     ):
         super().__init__(simulator=None)  # GRAPE uses _step_propagators, not a Simulator
-        self.parameterization = parameterization  # None -> infer PiecewiseConstant at solve time
-        self.optimizer = optimizer or ScipyLBFGS()
-        self.max_iter = max_iter
-        self.tol = tol
-
-    def solve(self, problem: OptimalControlProblem, callback=None) -> Result:
-        """Main entry point."""
-        system = problem.system.dynamics
-        objective = problem.objective
-        times = problem.times
-        dt = times[1] - times[0]
-
-        K = system.n_controls
-        N = len(times)
-        param = self.parameterization or PiecewiseConstant(K, N)
-
-        if not isinstance(param, PiecewiseConstant):
+        if not isinstance(parameterization, PiecewiseConstant):
             raise NotImplementedError(
                 f"GRAPE currently supports only PiecewiseConstant parameterization, "
                 f"got {type(param).__name__}"
             )
+        self.parameterization = parameterization
+        self.optimizer = optimizer or ScipyLBFGS()
+        self.max_iter = max_iter
+        self.tol = tol
 
-        theta0 = problem.initial_parameters
+    def solve(self, problem: OptimalControlProblem, initial_amplitudes=None, callback=None) -> Result:
+        """Main entry point."""
+        system = problem.system.dynamics
+        objective = problem.objective
+        dt = self.parameterization.dt
+        param = self.parameterization
+        N = param.n_timesteps
+        theta0 = self.parameterization.initial_theta(initial_amplitudes)
         if theta0.size != param.n_parameters:
             raise ValueError(
                 f"initial_parameters has size {theta0.size}, parameterization "
@@ -70,14 +65,14 @@ class GRAPE(Algorithm):
         history = []
 
         def loss_and_grad(theta: np.ndarray) -> tuple[float, np.ndarray]:
-            u = param.to_amplitudes(theta, times)  # (K, N)
+            u = param.to_amplitudes(theta)
             # GRAPE-specific steps
             Us = _step_propagators(system, u, dt)
             forward_evolution = self._forward_pass(Us, objective.initial)
             co_states = self._backward_pass(Us, objective.target)
 
             loss = objective.loss(Qobj(forward_evolution[-1]))
-            grads = self._gradient(forward_evolution, co_states, system.H_controls, N, dt)
+            grads = self._gradient(forward_evolution, co_states, system.controls, N, dt)
 
             history.append(1 - loss)
             if callback is not None:
@@ -100,7 +95,7 @@ class GRAPE(Algorithm):
                 f" Detailed optimiser report: {opt_result}"
             )
 
-        optimized_pulses = param.to_amplitudes(opt_result.x, times)
+        optimized_pulses = param.to_amplitudes(opt_result.x)
         return Result(
             optimized_pulses=optimized_pulses,
             fidelity=1 - opt_result.fun,
@@ -151,18 +146,16 @@ def define_problem():
     times = np.linspace(0, T, N)
     K = system.dynamics.n_controls
 
-    amplitudes = np.full((K, N), np.pi)
-    param = PiecewiseConstant(K, N)
-    theta0 = param.initial_theta(amplitudes)
+    param = PiecewiseConstant(K, times=times)
 
     initial_state = basis(2, 0)
     target_state = basis(2, 1)
     objective = StateTransfer(initial_state, target_state)
-    return OptimalControlProblem(system, objective, times, theta0)
+    return param, OptimalControlProblem(system, objective)
 
 
 if __name__ == "__main__":
-    problem = define_problem()
-    solver = GRAPE(optimizer=ScipyLBFGS())
+    parameterization, problem = define_problem()
+    solver = GRAPE(parameterization)
     result = solver.solve(problem)
     print(result)
