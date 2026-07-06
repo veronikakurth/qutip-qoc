@@ -1,0 +1,40 @@
+name: Tests
+
+on:
+  push:
+    branches: [qoc-prototype]
+  pull_request:
+    branches: [qoc-prototype]
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package with dev dependencies
+        run: |
+          pip install -e ".[dev]"
+          pip install matplotlib  # imported by test_integration/test_grape.py; not yet in pyproject
+
+      - name: Run tests
+        run: >
+          pytest
+          src/tests/test_integration/test_grape.py
+          src/tests/test_propagators/test_step_propagator.py
+          src/tests/test_systems/test_closed_system.py
+          src/tests/test_systems/test_open_system.py
+          --cov=qoc --cov-report=term-missing
