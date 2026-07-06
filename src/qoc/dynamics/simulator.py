@@ -35,7 +35,7 @@ class SESolveSim(Simulator):
         self.options = options or {}
 
     def evolve(self, system, control_amplitudes, times, initial, *, return_trajectory=False):
-        H = system.build_hamiltonian(control_amplitudes)
+        H = system.build_generator(control_amplitudes)
         result = sesolve(H, initial, times, options=self.options)
         return EvolutionResult(
             final=result.states[-1],
@@ -49,7 +49,7 @@ class MESolveSim(Simulator):
         self.options = options or {}
 
     def evolve(self, system, control_amplitudes, times, initial, *, return_trajectory=False):
-        H = system.build_hamiltonian(control_amplitudes)
+        H = system.build_generator(control_amplitudes)
         result = mesolve(H, initial, times, c_ops=system.c_ops, options=self.options)
         return EvolutionResult(
             final=result.states[-1],
