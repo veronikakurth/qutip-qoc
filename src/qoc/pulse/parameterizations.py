@@ -13,8 +13,6 @@ class PiecewiseConstant(PulseParameterization):
     ----------
     n_controls : int
         Number of controls.
-    n_timesteps : int
-        Number of time slices N (must match len(times) at call time).
     amplitude_range : tuple[float | None, float | None] | None, optional
         (min, max) bounds applied to every amplitude. Use ``None`` on
         either side to leave that direction unbounded. Default ``None`` means
@@ -29,12 +27,21 @@ class PiecewiseConstant(PulseParameterization):
     def __init__(
         self,
         n_controls: int,
-        n_timesteps: int,
-        amplitude_range: tuple[float | None, float | None] | None = None,
+        T: int = None,
+        N: int = None,
+        times: np.ndarray = None,
+        amplitude_range: tuple[float | None, float | None] | None = None
     ):
         self.n_controls = n_controls
-        self.n_timesteps = n_timesteps
+        if times is None:
+            times = np.linspace(0, T, N) # TODO: add validation that checks that either times or T + N are passed (exclusive or)
+        self.times = np.asarray(times)
+        self.n_timesteps = len(self.times)
         self.amplitude_range = amplitude_range
+    
+    @property
+    def dt(self) -> float:
+        return self.times[1] - self.times[0] # uniform grid assumption
 
     @property
     def n_parameters(self) -> int:
@@ -45,17 +52,9 @@ class PiecewiseConstant(PulseParameterization):
             return None
         return [self.amplitude_range] * self.n_parameters
 
-    def to_amplitudes(self, theta: np.ndarray, times: np.ndarray) -> np.ndarray:
+    def to_amplitudes(self, theta: np.ndarray) -> np.ndarray:
         """Reshape theta into a (n_controls, n_timesteps) amplitude array.
-
-        `times` is accepted only to validate that the algorithm's grid matches
-        the parameterization; its values are not used.
         """
-        if len(times) != self.n_timesteps:
-            raise ValueError(
-                f"times has {len(times)} points, parameterization expects "
-                f"{self.n_timesteps}"
-            )
         return np.asarray(theta).reshape(self.n_controls, self.n_timesteps)
 
     def amplitude_jacobian(self, theta: np.ndarray, times: np.ndarray) -> np.ndarray:
