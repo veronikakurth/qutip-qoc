@@ -12,8 +12,6 @@ class OptimalControlProblem:
         self,
         system: ControlledSystem,
         objective: Objective,
-        times: np.ndarray, # TODO: It's not clear whether it's pulse timestep or integrator timestep. Think whether it's not redundant here.
-        initial_parameters: np.ndarray, # TODO: feels redundant to have this here, very little validation we can do.
     ):
         """
         Parameters
@@ -33,20 +31,13 @@ class OptimalControlProblem:
             Algorithms validate its length against their
             PulseParameterization.n_parameters at solve time.
         """
-        self._validate(system, objective, times, initial_parameters)
+        self._validate(system, objective)
         self.system = system
         self.objective = objective
-        self.times = times
 
     @staticmethod
-    def _validate(system, objective, times):
+    def _validate(system, objective):
         if not isinstance(system, ControlledSystem):
             raise TypeError(f"system must be a ControlledSystem, got {type(system)}")
         if not isinstance(objective, Objective):
             raise TypeError(f"objective must be an Objective, got {type(objective)}")
-
-        times = np.asarray(times)
-        if times.ndim != 1 or len(times) < 2:
-            raise ValueError("times must be a 1D array with at least 2 points")
-        if not np.all(np.diff(times) > 0):
-            raise ValueError("times must be strictly increasing")
