@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qutip-qoc"
+version = "0.1.0.dev0"
+description = "Quantum Optimal Control framework built on QuTiP"
+requires-python = ">=3.9"
+dependencies = [
+    "qutip>=5.0",
+    "numpy",
+    "scipy",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
