@@ -1,6 +1,6 @@
 from .base import Algorithm
 from qoc.problem import OptimalControlProblem
-from qoc.result import Result
+from qoc.algorithms.result import Result
 
 class GOAT(Algorithm):
 
