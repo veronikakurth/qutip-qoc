@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import numpy as np
+from qutip import Qobj
 
 # TODO: think of usability of optimized pulses - can they be easily put into solver? This is a probable use case after optimisation. Are there more use cases
 @dataclass
@@ -27,3 +28,4 @@ class Result:
     n_iters: int
     optimizer_info: dict
     history: list[float]
+    final_state: Qobj # TODO: currently, used for debugging of GRAPE; is not necessarily used for a user and not necessarily universal across algorithms

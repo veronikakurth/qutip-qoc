@@ -64,7 +64,7 @@ class GRAPE(Algorithm):
 
         history = []
 
-        def loss_and_grad(theta: np.ndarray) -> tuple[float, np.ndarray]:
+        def loss_and_grad(theta: np.ndarray) -> tuple[float, np.ndarray]: # TODO: can I provide final state from forward evolution as a callback
             u = param.to_amplitudes(theta)
             # GRAPE-specific steps
             Us = _step_propagators(system, u, dt)
@@ -96,12 +96,16 @@ class GRAPE(Algorithm):
             )
 
         optimized_pulses = param.to_amplitudes(opt_result.x)
+        # TODO: this is neither efficient nor needed for a user in the result; more debugging data - what would be a good way to get it if required?
+        # Maybe some kind of meta algorithm data
+        final_state = self._forward_pass(_step_propagators(system, optimized_pulses, dt), objective.initial)[-1]
         return Result(
             optimized_pulses=optimized_pulses,
             fidelity=1 - opt_result.fun,
             n_iters=opt_result.nit,
             optimizer_info=opt_result,
             history=history,
+            final_state=final_state,
         )
 
     def _forward_pass(self, propagators: list, initial_state: Qobj) -> list:
