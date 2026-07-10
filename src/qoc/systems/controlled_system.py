@@ -6,6 +6,7 @@ from qutip import Qobj
 from typing import Literal
 
 # Facade class
+# TODO: add more properties that would mirror the interface of System class
 class ControlledSystem:
     # TODO: the constructor is not user-friendly at the moment: no type hinting for system parameters. Shall we at least add controllable/non-controllable part of dynamics
     # TODO: how to give hints for 'kind'?

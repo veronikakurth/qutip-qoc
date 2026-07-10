@@ -14,7 +14,11 @@ class EvolutionResult:
     final: Qobj
     trajectory: list[Qobj] | None = None
 
+# We may not want to expose the following classes to the user: for post-optimisation use cases (e.g., solving trajectory of quantum system with optimised pulses),
+# a user may want to go to qutip - we have to explain ways user-friendly ways to do so.
 
+# These classes are meant to be used as internal wrappers around qutip's solvers. 
+# TODO: what would be a mechanism to make it possible to use GPU backed of qutip?
 class Simulator(ABC):
 
     @abstractmethod
