@@ -3,24 +3,20 @@
 from .closed import ClosedSystem
 from .open import OpenSystem
 from qutip import Qobj
-from typing import Literal
 
 # Facade class
+# This design makes a strong assumption on two main classes of system existing, namely, open and closed.
+# Open questions: can we support also more custom cases when OpenSystem is not enough? In that case, we probably want a new subclass be a subclass of OpenSystem for the logic to work
 class ControlledSystem:
-    # TODO: the constructor is not user-friendly at the moment: no type hinting for system parameters. Shall we at least add controllable/non-controllable part of dynamics
-    # TODO: how to give hints for 'kind'?
-    def __init__(self, H0: Qobj, H_controls: list[Qobj], kind: Literal["closed", "open"], **system_params):
-        self.dynamics = SystemFactory.create(kind, {"H0": H0, "H_controls": H_controls} | system_params)
+    def __init__(self, H0: Qobj, H_controls: list[Qobj], is_closed: bool, **system_params):
+        self.dynamics = SystemFactory.create(is_closed, {"H0": H0, "H_controls": H_controls} | system_params)
 
-# Factory class: decides on exact implementation of System based on "kind" parameter
-# Alternatively, it could also decide based on passed parameters
+# Currently, system factory seems to be a bit redundant for this binary system classification
 class SystemFactory:
 
-    registry = {
-        "closed": ClosedSystem,
-        "open": OpenSystem
-    }
-
-    def create(kind: Literal["closed", "open"], params: dict):
+    def create(is_closed: bool, params: dict):
         # Return instantiated System object
-        return SystemFactory.registry.get(kind)(**params)
+        if is_closed:
+            return ClosedSystem(**params)
+        else:
+            return OpenSystem(**params)

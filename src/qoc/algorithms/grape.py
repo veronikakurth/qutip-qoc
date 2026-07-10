@@ -139,7 +139,7 @@ class GRAPE(Algorithm):
 def define_problem():
     H0 = 0 * sigmaz()
     H_c = [sigmax() / 2, sigmax() / 2]
-    system = ControlledSystem(H0=H0, H_controls=H_c, kind='closed')
+    system = ControlledSystem(H0=H0, H_controls=H_c, is_closed=True)
 
     T = 10
     N = 10
