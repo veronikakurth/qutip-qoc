@@ -11,6 +11,7 @@ class StateTransfer(Objective):
 
     Both initial and target must be kets (pure states) or density matrices (mixed states)
     with matching dimensions.
+    If a performance measure is not selected, StateFidelity is chosen by default.
     """
 
     def __init__(
@@ -21,6 +22,7 @@ class StateTransfer(Objective):
     ):
         if performance_measure is None:
             performance_measure = StateFidelity()
+            # TODO: if qutip.fidelity doesn't work with open systems, we might want to introduce our own wrapper that tackles both open and closed systems, in order to leave Objective agnostic of the system type
         _validate_state(initial, "initial")
         _validate_state(target, "target")
         if initial.dims != target.dims:

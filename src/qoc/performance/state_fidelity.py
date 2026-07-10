@@ -5,7 +5,6 @@ from .base import PerformanceMeasure
 # TODO: check if tackles open system. For this, check where and how used exactly
 # Answer: in the optimisation procedure, PerformanceMeasure.loss function is used
 # It's possible to compute fidelity for open system if qutip.fidelity supports it
-# Check how solvers construct open systems
 class StateFidelity(PerformanceMeasure):
     """State fidelity: 1 = perfect match, 0 = orthogonal."""
 
