@@ -65,3 +65,6 @@ def test_amplitude_bounds_are_enforced(x_closed_system):
     assert np.max(np.abs(u)) >= bound - 1e-6, (
         "bound was never saturated — test is vacuous, the bound is too loose"
     )
+
+
+# TODO: add a test that verifies GRAPE's result with sesolve
