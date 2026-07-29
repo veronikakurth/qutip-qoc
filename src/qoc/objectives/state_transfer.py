@@ -37,4 +37,7 @@ def _validate_state(obj: Qobj, name: str) -> None:
     if not isinstance(obj, Qobj):
         raise TypeError(f"{name} must be a Qobj, got {type(obj)}")
     if not obj.isket and not (obj.isoper and is_density_matrix(obj)):
-        raise ValueError(f"{name} must be a ket or density matrix")
+        raise ValueError(
+                f"{name} must be a ket or density matrix. \n"
+                f"Qobj.type: {obj.type!r}."
+            )
