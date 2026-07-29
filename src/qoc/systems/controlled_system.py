@@ -1,68 +1,98 @@
-# Give possibility to also define custom dynamics in addition to choosing a type
-# For example, introduce a new argument, "system_model" which is None by default, but if provided with a correct type (System), it defines the dynamics of the controlled system
+from .base import System
 from .closed import ClosedSystem
 from .open import OpenSystem
 from qutip import Qobj
-from typing import Literal
-import inspect
+from qutip.typing import QobjEvoLike
 
+# TODO: Do we also want to give possibility to define custom model in addition to working via pre-defined class methods? Currently, it would be possible via __init__, but this is for advanced usage.
 
+# Cost of maintenance: update the class every time
+# 1) new public attributes are added to System hierarchy
+# 2) add/update classmethods (in case of new System subclasses) or if anything changes in the constructor signature 
 # Facade class
-# TODO: add more properties that would mirror the interface of System class
 class ControlledSystem:
-    # TODO: the constructor is not user-friendly at the moment: no type hinting for system parameters. Shall we at least add controllable/non-controllable part of dynamics
-    # TODO: how to give hints for 'kind'?
-    def __init__(
-        self,
+    """User-facing class to a controlled quantum system.
+    The creation of the system of the required model (open or closed or other)
+    is controlled via class methods: ``closed``, ``open``.
+    """
+
+    def __init__(self, model: System):
+        # Prefer the typed constructors below over calling __init__ directly.
+        self._model = model
+
+    @classmethod
+    def closed(cls, H0: Qobj, H_controls: list[Qobj]) -> "ControlledSystem":
+        """Closed system with dynamics H(t) = H0 + sum_k u_k(t) * H_k."""
+        return cls(ClosedSystem(H0=H0, H_controls=H_controls))
+
+    @classmethod
+    def open(
+        cls,
         H0: Qobj,
         H_controls: list[Qobj],
-        kind: Literal["closed", "open"],
-        **system_params,
-    ):
-        self.dynamics = SystemFactory.create(
-            kind, {"H0": H0, "H_controls": H_controls} | system_params
+        c_ops: QobjEvoLike | list[QobjEvoLike] | None = None,
+    ) -> "ControlledSystem":
+        """Open (Lindbladian) system with optional collapse operators ``c_ops``."""
+        return cls(OpenSystem(H0=H0, H_controls=H_controls, c_ops=c_ops))
+
+    @classmethod
+    def open_liouvillian(
+        cls,
+        L0: QobjEvoLike,
+        H_controls: list[Qobj],
+    ) -> "ControlledSystem":
+        """Open system from a pre-assembled drift Liouvillian ``L0``.
+
+        Alternative to `open` instead of drift + collapse operators, the
+        caller supplies the drift Liouvillian directly (with any dissipation
+        already folded in), mirroring how qutip's ``mesolve`` accepts a
+        Liouvillian in place of a Hamiltonian. ``H_controls`` may be plain
+        operators (will be promoted internally) or control superoperators.
+        """
+        return cls(OpenSystem.from_liouvillian(L0=L0, H_controls=H_controls))
+
+    # --- bringing System interface to the user ---
+    @property
+    def n_controls(self) -> int:
+        return self._model.n_controls
+
+    @property
+    def dims(self):
+        return self._model.dims
+
+    @property
+    def shape(self):
+        return self._model.shape
+
+    @property
+    def drift(self) -> Qobj:
+        return self._model.drift
+
+    @property
+    def controls(self) -> list[Qobj]:
+        return self._model.controls
+
+    def build_generator(self, control_amplitudes) -> list:
+        return self._model.build_generator(control_amplitudes)
+
+    def build_generator_time_j(self, control_amplitudes, j: int):
+        return self._model.build_generator_time_j(control_amplitudes, j)
+
+    def default_simulator(self):
+        """Return the Simulator appropriate for this system's dynamics."""
+        # Import lazily to avoid an import cycle
+        # between systems and dynamics modules
+        from qoc.dynamics.simulator import default_simulator_for
+
+        return default_simulator_for(self._model)
+
+    def __repr__(self) -> str:
+        kind = type(self._model).__name__
+        return (
+            f"ControlledSystem({kind}, dims={self.dims}, "
+            f"n_controls={self.n_controls})"
         )
-
-
-# Factory class: decides on exact implementation of System based on "kind" parameter
-# Alternatively, it could also decide based on passed parameters
-class SystemFactory:
-
-    registry = {"closed": ClosedSystem, "open": OpenSystem}
-
-    @staticmethod
-    def create(kind: Literal["closed", "open"], params: dict):
-        # Return instantiated System object
-        cls = SystemFactory.registry.get(kind)
-
-        if cls is None:
-            valid = ", ".join(repr(c) for c in SystemFactory.registry)
-            raise ValueError(
-                f"Unknown system kind {kind!r}. Expected one of: \n" f"{valid}"
-            )
-        sig = inspect.signature(cls.__init__)
-        accepted = {name for name in sig.parameters if name != "self"}
-        required = {
-            name
-            for name, p in sig.parameters.items()
-            if name != "self"
-            and p.default is inspect.Parameter.empty
-            and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
-        }
-        missing = required - params.keys()
-
-        if missing:
-            raise TypeError(
-                f"A '{kind}' system requires {sorted(missing)}, "
-                f"which were not provided. \n"
-                f"Parameters for a '{kind}' system: {sorted(accepted)}."
-            )
-
-        unexpected = params.keys() - accepted
-        if unexpected:
-            raise TypeError(
-                f"A '{kind}' system does not accept {sorted(unexpected)}. "
-                f"Accepted parameters: {sorted(accepted)}. "
-            )
-
-        return cls(**params)
+    # Some properties are not universal across System subclasses, hence a fallback to a default value
+    @property 
+    def c_ops(self) -> list:
+        return getattr(self._model, "c_ops")
