@@ -50,7 +50,7 @@ class GRAPE(Algorithm):
 
     def solve(self, problem: OptimalControlProblem, initial_amplitudes=None, callback=None) -> Result:
         """Main entry point."""
-        system = problem.system.dynamics
+        system = problem.system
         objective = problem.objective
         dt = self.parameterization.dt
         param = self.parameterization
@@ -143,12 +143,12 @@ class GRAPE(Algorithm):
 def define_problem():
     H0 = 0 * sigmaz()
     H_c = [sigmax() / 2, sigmax() / 2]
-    system = ControlledSystem(H0=H0, H_controls=H_c, kind='closed')
+    system = ControlledSystem.closed(H0=H0, H_controls=H_c)
 
     T = 10
     N = 10
     times = np.linspace(0, T, N)
-    K = system.dynamics.n_controls
+    K = system.n_controls
 
     param = PiecewiseConstant(K, times=times)
 

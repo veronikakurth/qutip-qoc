@@ -16,7 +16,7 @@ class CRAB(Algorithm):
         self.parameterization = parameterization
 
     def solve(self, problem: OptimalControlProblem) -> Result:
-        simulator = self._get_simulator(problem.system.dynamics)
+        simulator = self._simulator or problem.system.default_simulator()
         param = self.parameterization
         theta0 = problem.initial_parameters
         if theta0.size != param.n_parameters:
@@ -26,7 +26,7 @@ class CRAB(Algorithm):
             )
         # TODO: optimizer loop. Loss evaluation:
         #   u = param.to_amplitudes(theta, problem.times)
-        #   out = simulator.evolve(problem.system.dynamics, u, problem.times,
+        #   out = simulator.evolve(problem.system, u, problem.times,
         #                          problem.objective.initial)
         #   loss = problem.objective.loss(out.final)
         raise NotImplementedError

@@ -53,8 +53,10 @@ class MESolveSim(Simulator):
         self.options = options or {}
 
     def evolve(self, system, control_amplitudes, times, initial, *, return_trajectory=False):
-        H = system.build_generator(control_amplitudes)
-        result = mesolve(H, initial, times, c_ops=system.c_ops, options=self.options)
+        # build_generator returns the full drift Liouvillian (dissipation
+        # already folded in), so no c_ops are passed separately.
+        L = system.build_generator(control_amplitudes)
+        result = mesolve(L, initial, times, options=self.options)
         return EvolutionResult(
             final=result.states[-1],
             trajectory=result.states if return_trajectory else None,
