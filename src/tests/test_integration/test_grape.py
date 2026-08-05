@@ -10,9 +10,9 @@ from qoc.pulse import PiecewiseConstant
 
 @pytest.fixture
 def x_open_system(): # fake example (for now, to test against superficial interface problems)
-    return ControlledSystem.open(H0=0 * qutip.sigmax(), H_controls=[qutip.sigmax()], c_ops=[qutip.sigmaz()])
+    return ControlledSystem.open(H0=0 * qutip.sigmax(), H_controls=[qutip.sigmax()])
 
-def test_state_transfer_single_qubit_open(x_open_system):
+def test_state_transfer_single_qubit_open_system(x_open_system):
     # Testing GRAPE for a state transfer on a single qubit for which
     # an analytical solution is known
     system = x_open_system
@@ -25,9 +25,8 @@ def test_state_transfer_single_qubit_open(x_open_system):
     initial_pulse = np.random.uniform(-0.1, 0.1, (K, N))
     param = PiecewiseConstant(K, times=times)
     dt = param.dt
-
-    initial_state = qutip.basis(2, 0)
-    target_state = qutip.basis(2, 1)
+    initial_state = qutip.ket2dm(qutip.basis(2, 0)) # start in |0><0|
+    target_state = qutip.ket2dm((qutip.basis(2,0) + qutip.basis(2,1)).unit())   # target |+><+|
     # By default, state fidelity is used as a performance measure in a state transfer task
     objective = StateTransfer(initial_state, target_state)
     control_problem = OptimalControlProblem(system, objective)
