@@ -23,7 +23,9 @@ def _step_propagators(system: System, control_amplitudes: np.ndarray, dt: float)
     propagators = [None] * N
     for j in range(N):
         H_j = system.build_generator_time_j(control_amplitudes, j)
+        # dev note: we always convert generator to dense here... will be an issue for performance
         propagators[j] = expm(-1j * H_j.full() * dt)
+        # TODO: adapt this formula to work with closed and open systems universally (infer the factor)
     return propagators
 
 
@@ -51,6 +53,7 @@ class GRAPE(Algorithm):
     def solve(self, problem: OptimalControlProblem, initial_amplitudes=None, callback=None) -> Result:
         """Main entry point."""
         system = problem.system
+        # TODO: do encoding of boundary conditions, drift and control generators here
         objective = problem.objective
         dt = self.parameterization.dt
         param = self.parameterization
@@ -68,10 +71,9 @@ class GRAPE(Algorithm):
             u = param.to_amplitudes(theta)
             # GRAPE-specific steps
             Us = _step_propagators(system, u, dt)
-            forward_evolution = self._forward_pass(Us, objective.initial)
-            co_states = self._backward_pass(Us, objective.target)
-
-            loss = objective.loss(Qobj(forward_evolution[-1]))
+            forward_evolution = self._forward_pass(Us, initial)
+            co_states = self._backward_pass(Us, target)
+            loss = objective.loss(Qobj(forward_evolution[-1], dims=initial.dims))
             grads = self._gradient(forward_evolution, co_states, system.controls, N, dt)
 
             history.append(1 - loss)
@@ -80,7 +82,6 @@ class GRAPE(Algorithm):
 
             # For PiecewiseConstant, dL/dtheta == dL/du flattened (Jacobian is identity).
             return loss, grads.ravel()
-
         opt_result = self.optimizer.minimize(
             loss_and_grad,
             x0=theta0,
@@ -129,12 +130,13 @@ class GRAPE(Algorithm):
         K = len(H_c)
         H_c_arrays = [Hc.full() for Hc in H_c]
         c = (adj(co_states[-1]) @ forward_evolution[-1]).item()  # <phi|psi_N>
-
+        # TODO: forward and co-states have to be reshaped in case of open system for matrix multiplication to work
         grads = np.zeros((K, N), dtype=float)
         for j in range(N):
             psi_j = forward_evolution[j]
             co_state_jp1 = co_states[j + 1]
             for k, Hc in enumerate(H_c_arrays):
+                # TODO: for overlap, ensure the formula is right for both system type -> infer it from PM/Objective?
                 inner = (adj(co_state_jp1) @ Hc @ psi_j).item()
                 grads[k, j] = -2.0 * dt * np.imag(np.conj(c) * inner)
         return grads
