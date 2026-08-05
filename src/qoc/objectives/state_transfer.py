@@ -1,7 +1,8 @@
 from qutip import Qobj
 
 from qoc.performance.base import PerformanceMeasure
-from qoc.performance.state_fidelity import StateFidelity, _validate_states
+from qoc.performance.state_fidelity import StateFidelity
+from qoc.utils.objective_helpers import validate_states
 from .base import Objective
 
 
@@ -28,5 +29,5 @@ class StateTransfer(Objective):
                 raise TypeError(
                     f"Expected PerformanceMeasure as type of performance_measure, got={type(performance_measure)}"
                 )
-        _validate_states(initial, target)
+        validate_states(initial, target)
         super().__init__(initial, target, performance_measure)
