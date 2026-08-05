@@ -19,7 +19,7 @@ class Objective:
         self,
         initial: Qobj,
         target: Qobj,
-        performance_measure: PerformanceMeasure,
+        performance_measure: PerformanceMeasure, # ~ figure of merit
     ):
         if not isinstance(performance_measure, PerformanceMeasure):
             raise TypeError(
