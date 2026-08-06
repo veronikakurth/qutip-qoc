@@ -1,6 +1,8 @@
 import numpy as np
+from typing import Union
 from qutip import Qobj, basis, sigmax, sigmaz
 from scipy.linalg import expm
+from dataclasses import dataclass, field, fields
 
 from qoc.algorithms.base import Algorithm
 from qoc.algorithms.result import Result
@@ -17,17 +19,36 @@ def adj(A):
     return np.conj(A).T
 
 
-def _step_propagators(system: System, control_amplitudes: np.ndarray, dt: float) -> list:
-    """Per-slice unitaries U_j = expm(-i H_j dt) for piecewise-constant controls."""
-    N = control_amplitudes.shape[1]
-    propagators = [None] * N
-    for j in range(N):
-        H_j = system.build_generator_time_j(control_amplitudes, j)
-        # dev note: we always convert generator to dense here... will be an issue for performance
-        propagators[j] = expm(-1j * H_j.full() * dt)
-        # TODO: adapt this formula to work with closed and open systems universally (infer the factor)
+# Dev note: we pass system here since we need its motion generator method
+def _step_propagators(system: System, u: np.ndarray, dt: float) -> list[np.ndarray]:
+    """Calculate per-step unitaries U_j = expm(prefactor * H_j * dt).
+       Prefactor term depends on the system type"""
+    # Infer number of time steps from control amplitudes shape
+    steps_n = u.shape[1]
+    propagators = [None] * steps_n
+    for j in range(steps_n):
+        # Get a motion generator for time j (time-dependent Hamiltonian/Liouvillian with pulse and prefactor term)
+        G_j = system.motion_generator_time_j(u, j)
+        # Compute matrix exponential
+        propagators[j] = expm(system.encode_operator(G_j) * dt)
     return propagators
 
+# TODO: relocate it onto optimizer later
+@dataclass
+class OptimizerParams:
+    max_iter: int = 100,
+    tol: float = 1e-8,
+    extra: dict = field(default_factory=dict) # optimizer-specific options, forwarded as **kwargs
+    # maps to scipy options
+
+    @classmethod
+    def from_dict(cls, d: dict | None) -> "OptimizerParams":
+        # Map known keys to fields, everything else goes into `extra`
+        d = dict(d or {})
+        known = {f.name for f in fields(cls)} - {"extra"}
+        extra = {k: d.pop(k) for k in list(d) if k not in known}
+        return cls(**d, extra=extra)
+    
 
 # The procedure must be compatible with both state transfer and gate synthesis tasks
 class GRAPE(Algorithm):
@@ -36,58 +57,62 @@ class GRAPE(Algorithm):
         self,
         parameterization: PulseParameterization,
         optimizer: Optimizer | None = None,
-        max_iter: int = 100,
-        tol: float = 1e-8,
+        optimizer_params: dict | None = None,
     ):
-        super().__init__(simulator=None)  # GRAPE uses _step_propagators, not a Simulator
+        super().__init__()
         if not isinstance(parameterization, PiecewiseConstant):
             raise NotImplementedError(
-                f"GRAPE currently supports only PiecewiseConstant parameterization, "
+                f"GRAPE currently supports only parameterization of type PiecewiseConstant, "
                 f"got {type(param).__name__}"
             )
         self.parameterization = parameterization
+        # Set optimizer or instantiate a default one (LBFGS by SciPy)
         self.optimizer = optimizer or ScipyLBFGS()
-        self.max_iter = max_iter
-        self.tol = tol
+        self.optimizer_params = OptimizerParams.from_dict(optimizer_params)
 
-    def solve(self, problem: OptimalControlProblem, initial_amplitudes=None, callback=None) -> Result:
+    def solve(self, problem: OptimalControlProblem, initial_param_values, callback=None) -> Result:
         """Main entry point."""
-        system = problem.system
-        # TODO: do encoding of boundary conditions, drift and control generators here
+        system = problem.system.model
         objective = problem.objective
+        # Encode boundary conditions from Qobj into numerical representation (np.ndarray)
+        initial_encoded = system.encode_state(objective.initial)
+        target_encoded = system.encode_state(objective.target)
+        controls_encoded = [system.encode_operator(g) for g in system.control_generators()]
+        # Extract info from parameterization needed for algorithm 
         dt = self.parameterization.dt
-        param = self.parameterization
-        N = param.n_timesteps
-        theta0 = self.parameterization.initial_theta(initial_amplitudes)
-        if theta0.size != param.n_parameters:
-            raise ValueError(
-                f"initial_parameters has size {theta0.size}, parameterization "
-                f"expects {param.n_parameters}"
-            )
+        N = self.parameterization.n_timesteps
+        # Initial values of parameter vector
+        theta0 = self.parameterization.initial_theta(initial_param_values)
 
-        history = []
+        fidelity_history = []
 
         def loss_and_grad(theta: np.ndarray) -> tuple[float, np.ndarray]: # TODO: can I provide final state from forward evolution as a callback
-            u = param.to_amplitudes(theta)
+            u = self.parameterization.to_amplitudes(theta)
             # GRAPE-specific steps
-            Us = _step_propagators(system, u, dt)
-            forward_evolution = self._forward_pass(Us, initial)
-            co_states = self._backward_pass(Us, target)
-            loss = objective.loss(Qobj(forward_evolution[-1], dims=initial.dims))
-            grads = self._gradient(forward_evolution, co_states, system.controls, N, dt)
+            # Compute propagators for every time step
+            Us = _step_propagators(system, u, dt) # -> list[Qobj]
+            # Compute forward pass (starting with objective's initial state - pre-encoded)
+            forward_evolution = self._forward_pass(Us, initial_encoded)
+            co_states = self._backward_pass(Us, target_encoded)
+            # A slight inconsistency: here, we operate on Qobj since Objective.loss is defined on it
+            # As long as performance is not a problem we leave it this way
+            loss = objective.loss(system.decode_state(forward_evolution[-1]))
+            grads = self._gradient(forward_evolution, co_states, controls_encoded, N, dt)
 
-            history.append(1 - loss)
+            fidelity_history.append(1 - loss)
             if callback is not None:
                 callback(theta, loss)
 
             # For PiecewiseConstant, dL/dtheta == dL/du flattened (Jacobian is identity).
             return loss, grads.ravel()
+
         opt_result = self.optimizer.minimize(
             loss_and_grad,
             x0=theta0,
-            max_iter=self.max_iter,
-            tol=self.tol,
-            bounds=param.bounds(),
+            max_iter=self.optimizer_params.max_iter,
+            tol=self.optimizer_params.tol,
+            #bounds=self.parameterization.bounds(),
+            **self.optimizer_params.extra
         )
 
         if not opt_result.success:
@@ -105,39 +130,47 @@ class GRAPE(Algorithm):
             fidelity=1 - opt_result.fun,
             n_iters=opt_result.nit,
             optimizer_info=opt_result,
-            history=history,
+            history=fidelity_history,
             final_state=final_state,
         )
-
-    def _forward_pass(self, propagators: list, initial_state: Qobj) -> list:
+    # TODO: adjust signatures: a lot of data comes into the methods encoded w.r.t. system type
+    def _forward_pass(self, propagators: list[np.ndarray], initial_state: np.ndarray) -> list[np.ndarray]:
+        # Start with initial state and compute propagated state for every time step
+        # using previously computed propagators
+        # Important! Initial state comes encoded already
         N = len(propagators)
-        forward_evolution = [None] * (N + 1)
-        forward_evolution[0] = initial_state.full().copy()
+        forward_evolution = [None] * (N + 1) # +1 since we include the initial state
+        forward_evolution[0] = initial_state
         for j, U in enumerate(propagators):
             forward_evolution[j + 1] = U @ forward_evolution[j]
         return forward_evolution
 
-    def _backward_pass(self, propagators: list, target_state: Qobj):
+    def _backward_pass(self, propagators: list[np.ndarray], target_state: np.ndarray):
+        # Based on previously computed step propagators and target state,
+        # go "back in time" by computing co-states from target to the beginning
+        # of the evolution
         N = len(propagators)
-        co_states = [None] * (N + 1)
-        co_states[N] = target_state.full()
+        co_states = [None] * (N + 1) # Plus one since we include target state
+        co_states[N] = target_state
         for j in reversed(range(N)):
             co_states[j] = adj(propagators[j]) @ co_states[j + 1]
         return co_states
-
-    def _gradient(self, forward_evolution: list, co_states: list, H_c: list, N: int, dt: float):
+    
+    # TODO: make signature more specific
+    # TODO: try to make use of more Qobj specific functions to become more agnostic of backend
+    def _gradient(self, forward_evolution: list[np.ndarray], co_states: list[np.ndarray], controls: list[np.ndarray], N: int, dt: float) -> np.ndarray:
         """Adjoint-method gradient. Requires forward + backward passes."""
-        K = len(H_c)
-        H_c_arrays = [Hc.full() for Hc in H_c]
+        K = len(controls)
+        # Compute scalar product between last co-state and last evolved state
         c = (adj(co_states[-1]) @ forward_evolution[-1]).item()  # <phi|psi_N>
-        # TODO: forward and co-states have to be reshaped in case of open system for matrix multiplication to work
         grads = np.zeros((K, N), dtype=float)
         for j in range(N):
             psi_j = forward_evolution[j]
             co_state_jp1 = co_states[j + 1]
-            for k, Hc in enumerate(H_c_arrays):
-                # TODO: for overlap, ensure the formula is right for both system type -> infer it from PM/Objective?
+            for k, Hc in enumerate(controls):
+                # Scalar product between current co state and current evolved state
                 inner = (adj(co_state_jp1) @ Hc @ psi_j).item()
+                # TODO: for overlap, ensure the formula is right for both system type -> infer it from PM/Objective?
                 grads[k, j] = -2.0 * dt * np.imag(np.conj(c) * inner)
         return grads
 
