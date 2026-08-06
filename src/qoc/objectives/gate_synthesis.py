@@ -17,7 +17,7 @@ class GateSynthesis(Objective):
         self,
         initial: Qobj,
         target: Qobj,
-        performance_measure: None | PerformanceMeasure = None
+        performance_measure: None | PerformanceMeasure = None,
     ):
         if performance_measure is None:
             performance_measure = GateFidelity()
@@ -29,6 +29,14 @@ class GateSynthesis(Objective):
                 f"{initial.dims} vs {target.dims}"
             )
         super().__init__(initial, target, performance_measure)
+
+    def check_compatible(self, system) -> None:
+        super().check_compatible(system)
+
+        if system.state_type == "dm":  # open system case
+            raise NotImplementedError(
+                "Gate synthesis on open systems is not supported yet"
+            )
 
 
 def _validate_operator(obj: Qobj, name: str) -> None:
