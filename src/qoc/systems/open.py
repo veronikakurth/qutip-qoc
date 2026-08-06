@@ -1,7 +1,7 @@
 import numpy as np
-from qutip import Qobj, QobjEvo, liouvillian
+from qutip import Qobj, QobjEvo, liouvillian, operator_to_vector, vector_to_operator
 
-from .base import System
+from .base import System, StateType, ClassVar
 
 from qutip.typing import QobjEvoLike
 
@@ -9,6 +9,8 @@ from qutip.typing import QobjEvoLike
 class OpenSystem(System):
     """
     Open quantum system evolving under a Lindblad master equation.
+
+    Liouville space, dim n^2
 
     There are two equivalent ways to build one:
 
@@ -28,6 +30,8 @@ class OpenSystem(System):
     For purely coherent evolution of a pure state, however,
     ``ClosedSystem`` should be preferred.
     """
+
+    state_type: ClassVar[StateType] = "dm"
 
     def __init__(
         self,
@@ -83,6 +87,16 @@ class OpenSystem(System):
             H_k if H_k.issuper else liouvillian(H_k) for H_k in H_controls
         ]
         return obj
+    # System representation
+
+    def encode_state(state: Qobj) -> np.ndarray:
+        return operator_to_vector(state).full() # shape (n**2, 1)
+
+    def decode_state(arr: np.ndarray) -> Qobj:
+        return vector_to_operator(Qobj(arr, dims=self.dims)) # shape (n,n) (DM)
+
+    def control_generators():
+        return self._L_controls
 
     @property
     def c_ops(self) -> list[Qobj | QobjEvo]:

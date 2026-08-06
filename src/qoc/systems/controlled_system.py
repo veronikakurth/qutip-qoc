@@ -1,4 +1,4 @@
-from .base import System
+from .base import System, StateType
 from .closed import ClosedSystem
 from .open import OpenSystem
 from qutip import Qobj
@@ -52,6 +52,11 @@ class ControlledSystem:
         return cls(OpenSystem.from_liouvillian(L0=L0, H_controls=H_controls))
 
     # --- bringing System interface to the user ---
+
+    @property
+    def state_type(self) -> StateType:
+        return self._model.state_type
+
     @property
     def n_controls(self) -> int:
         return self._model.n_controls

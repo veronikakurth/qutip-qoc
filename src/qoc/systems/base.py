@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
+from typing import ClassVar, Literal
 
 import numpy as np
 from qutip import Qobj
 
+StateType = Literal["ket", "dm"]
 
 class System(ABC):
     """Physics of the controlled system.
@@ -13,10 +15,36 @@ class System(ABC):
     either sesolve or mesolve.
     """
     
+
     def __init__(self, H0: Qobj, H_controls: list[Qobj]):
         self._validate_hamiltonians(H0, H_controls)
         self._H0 = H0
         self._H_controls = H_controls
+
+    # System representation
+
+    state_type: ClassVar[StateType]
+
+    @abstractmethod
+    def encode_state(self, state: Qobj) -> np.ndarray:
+        """Column-vector representation the propagators act on. Inverse of decode_state""" 
+
+    @abstractmethod
+    def decode_state(self, arr: np.ndarray) -> Qobj:
+        """Reconstruct the physical Qobj from encode_state's output """
+
+    # decode_state(encode_state(x)) ~= x
+
+    def encode_operator(self, op: Qobj) -> np.ndarray:
+        return op.full()
+
+    @abstractmethod
+    def control_generators(self) -> list[Qobj]:
+        """Control operators in the generator space (H_k vs L_k) """
+
+    @abstractmethod
+    def motion_generator_time_j(self, u, j) -> Qobj:
+        """ """
     
     @property
     def n_controls(self) -> int:
