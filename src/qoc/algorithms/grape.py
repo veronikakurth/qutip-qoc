@@ -36,8 +36,8 @@ def _step_propagators(system: System, u: np.ndarray, dt: float) -> list[np.ndarr
 # TODO: relocate it onto optimizer later
 @dataclass
 class OptimizerParams:
-    max_iter: int = 100,
-    tol: float = 1e-8,
+    max_iter: int = 100
+    tol: float = 1e-8
     extra: dict = field(default_factory=dict) # optimizer-specific options, forwarded as **kwargs
     # maps to scipy options
 
@@ -121,10 +121,10 @@ class GRAPE(Algorithm):
                 f" Detailed optimiser report: {opt_result}"
             )
 
-        optimized_pulses = param.to_amplitudes(opt_result.x)
+        optimized_pulses = self.parameterization.to_amplitudes(opt_result.x)
         # TODO: this is neither efficient nor needed for a user in the result; more debugging data - what would be a good way to get it if required?
         # Maybe some kind of meta algorithm data
-        final_state = self._forward_pass(_step_propagators(system, optimized_pulses, dt), objective.initial)[-1]
+        final_state = self._forward_pass(_step_propagators(system, optimized_pulses, dt), initial_encoded)[-1]
         return Result(
             optimized_pulses=optimized_pulses,
             fidelity=1 - opt_result.fun,
