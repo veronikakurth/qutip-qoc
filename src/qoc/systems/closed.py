@@ -39,18 +39,18 @@ class ClosedSystem(System):
     def decode_state(self, arr: np.ndarray) -> Qobj:
         return Qobj(arr, dims=self.dims)
 
-    def control_generators():
+    def control_generators(self):
         return self._motion_controls
 
     def build_generator(
-        self, control_amplitudes: np.ndarray
+        self, u: np.ndarray
     ) -> list:
         """Build the QuTiP time-dependent Hamiltonian list."""
         H = [self._H0]
         for k, H_k in enumerate(self._H_controls):
-            H.append([H_k, control_amplitudes[k]])
+            H.append([H_k, u[k]])
         return H
 
-    def motion_generator_time_j(self, control_amplitudes: np.ndarray, j: int) -> Qobj:
-        H_j = self._H0 + sum(control_amplitudes[k][j] * self._H_controls[k] for k in range(self.n_controls))
+    def motion_generator_time_j(self, u: np.ndarray, j: int) -> Qobj:
+        H_j = self._H0 + sum(u[k][j] * self._H_controls[k] for k in range(self.n_controls))
         return self._GENERATOR_PREFACTOR * H_j

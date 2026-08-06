@@ -32,7 +32,7 @@ class OpenSystem(System):
     """
 
     state_type: ClassVar[StateType] = "dm"
-
+    
     def __init__(
         self,
         H0: Qobj,
@@ -89,13 +89,13 @@ class OpenSystem(System):
         return obj
     # System representation
 
-    def encode_state(state: Qobj) -> np.ndarray:
+    def encode_state(self, state: Qobj) -> np.ndarray:
         return operator_to_vector(state).full() # shape (n**2, 1)
 
-    def decode_state(arr: np.ndarray) -> Qobj:
+    def decode_state(self, arr: np.ndarray) -> Qobj:
         return vector_to_operator(Qobj(arr, dims=self.dims)) # shape (n,n) (DM)
 
-    def control_generators():
+    def control_generators(self):
         return self._L_controls
 
     @property
@@ -112,8 +112,7 @@ class OpenSystem(System):
             L.append([self._L_controls[k], u[k]])
         return L
 
-    # Currently, only used in GRAPE
-    def build_generator_time_j(self, u: np.ndarray, j: int) -> Qobj:
+    def motion_generator_time_j(self, u: np.ndarray, j: int) -> Qobj:
         return self._L0 + sum(
             u[k][j] * self._L_controls[k]
             for k in range(self.n_controls)

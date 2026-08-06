@@ -43,7 +43,7 @@ class System(ABC):
         """Control operators in the generator space (H_k vs L_k) """
 
     @abstractmethod
-    def motion_generator_time_j(self, u, j) -> Qobj:
+    def motion_generator_time_j(self, u: np.ndarray, j: int) -> Qobj:
         """ """
     
     @property
@@ -80,11 +80,6 @@ class System(ABC):
         -------
         list
             ``[H0, [H_1, u_1], [H_2, u_2], ...]`` consumable by sesolve/mesolve.
-        """
-
-    @abstractmethod
-    def build_generator_time_j(self, control_amplitudes, j):
-        """
         """
 
     def _validate_hamiltonians(self, H0: Qobj, H_controls: list) -> None:

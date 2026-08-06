@@ -52,6 +52,10 @@ class ControlledSystem:
         return cls(OpenSystem.from_liouvillian(L0=L0, H_controls=H_controls))
 
     # --- bringing System interface to the user ---
+    
+    @property
+    def model(self) -> System:
+        return self._model
 
     @property
     def state_type(self) -> StateType:
