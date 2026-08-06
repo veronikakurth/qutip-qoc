@@ -3,7 +3,7 @@ import numpy as np
 from qoc.systems.controlled_system import ControlledSystem
 from qoc.objectives.base import Objective
 
-
+# A so-called compatibility layer
 class OptimalControlProblem:
     """Full description of an OCP: what system, what goal, over what time, starting from what parameter guess."""
     # TODO: maybe we should simplify to Problem(system, objective)
@@ -41,3 +41,4 @@ class OptimalControlProblem:
             raise TypeError(f"system must be a ControlledSystem, got {type(system)}")
         if not isinstance(objective, Objective):
             raise TypeError(f"objective must be an Objective, got {type(objective)}")
+        objective.check_compatible(system)
