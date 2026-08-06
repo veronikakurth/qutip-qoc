@@ -35,3 +35,11 @@ class Objective:
 
     def loss(self, current: Qobj) -> float:
         return 1.0 - self.compute(current)
+
+    def check_compatible(self, system) -> None:
+        """Validate this objective against the system it's paired with"""
+        if self.initial.dims[0] != system.dims[0]:
+            raise ValueError(
+                f"objective acts on Hilbert space {self.initial.dims[0]}, "
+                f"but system is defined on {system.dims[0]}"
+            )
