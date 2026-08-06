@@ -2,7 +2,7 @@ from qutip import Qobj
 
 from qoc.performance.base import PerformanceMeasure
 from qoc.performance.state_fidelity import StateFidelity
-from qoc.utils.objective_helpers import validate_states
+from qoc.utils.objective_helpers import validate_states, state_type
 from .base import Objective
 
 
@@ -31,3 +31,11 @@ class StateTransfer(Objective):
                 )
         validate_states(initial, target)
         super().__init__(initial, target, performance_measure)
+
+    def check_compatible(self, system) -> None:
+        super().check_compatible(system)
+        type_ = state_type(self.initial)
+        if type_ != system.state_type:  # TODO: add property to system interface
+            raise ValueError(
+                f"System expects {system.state_type} states, but objective provides {type_}"
+            )
