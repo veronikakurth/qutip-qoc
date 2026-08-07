@@ -105,7 +105,6 @@ class GRAPE(Algorithm):
 
             # For PiecewiseConstant, dL/dtheta == dL/du flattened (Jacobian is identity).
             return loss, grads.ravel()
-
         opt_result = self.optimizer.minimize(
             loss_and_grad,
             x0=theta0,
@@ -114,6 +113,7 @@ class GRAPE(Algorithm):
             #bounds=self.parameterization.bounds(),
             **self.optimizer_params.extra
         )
+
 
         if not opt_result.success:
             print(
@@ -131,7 +131,7 @@ class GRAPE(Algorithm):
             n_iters=opt_result.nit,
             optimizer_info=opt_result,
             history=fidelity_history,
-            final_state=final_state,
+            final_state=system.decode_state(final_state)
         )
     # TODO: adjust signatures: a lot of data comes into the methods encoded w.r.t. system type
     def _forward_pass(self, propagators: list[np.ndarray], initial_state: np.ndarray) -> list[np.ndarray]:
