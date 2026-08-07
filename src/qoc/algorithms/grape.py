@@ -48,7 +48,7 @@ class OptimizerParams:
         known = {f.name for f in fields(cls)} - {"extra"}
         extra = {k: d.pop(k) for k in list(d) if k not in known}
         return cls(**d, extra=extra)
-    
+
 
 # The procedure must be compatible with both state transfer and gate synthesis tasks
 class GRAPE(Algorithm):
@@ -70,23 +70,26 @@ class GRAPE(Algorithm):
         self.optimizer = optimizer or ScipyLBFGS()
         self.optimizer_params = OptimizerParams.from_dict(optimizer_params)
 
-    def solve(self, problem: OptimalControlProblem, initial_param_values, callback=None) -> Result:
-        """Main entry point."""
+    def build_loss_and_grad(self, problem: OptimalControlProblem, fidelity_history: list | None = None):
+        """Build the GRAPE objective closure `theta -> (loss, grad)`.
+
+        Returned standalone so it can be reused outside `solve`. For example, 
+        for gradient checks (`scipy.optimize.check_grad`, `approx_fprime`), 
+        plotting the loss landscape, or driving a custom optimizer loop. `solve` is just one caller.
+
+        If `fidelity_history` is passed, `1 - loss` is appended on every call.
+        """
         system = problem.system.model
         objective = problem.objective
         # Encode boundary conditions from Qobj into numerical representation (np.ndarray)
         initial_encoded = system.encode_state(objective.initial)
         target_encoded = system.encode_state(objective.target)
         controls_encoded = [system.encode_operator(g) for g in system.control_generators()]
-        # Extract info from parameterization needed for algorithm 
+        # Extract info from parameterization needed for algorithm
         dt = self.parameterization.dt
         N = self.parameterization.n_timesteps
-        # Initial values of parameter vector
-        theta0 = self.parameterization.initial_theta(initial_param_values)
 
-        fidelity_history = []
-
-        def loss_and_grad(theta: np.ndarray) -> tuple[float, np.ndarray]: # TODO: can I provide final state from forward evolution as a callback
+        def loss_and_grad(theta: np.ndarray) -> tuple[float, np.ndarray]:
             u = self.parameterization.to_amplitudes(theta)
             # GRAPE-specific steps
             # Compute propagators for every time step
@@ -99,12 +102,23 @@ class GRAPE(Algorithm):
             loss = objective.loss(system.decode_state(forward_evolution[-1]))
             grads = self._gradient(forward_evolution, co_states, controls_encoded, N, dt)
 
-            fidelity_history.append(1 - loss)
-            if callback is not None:
-                callback(theta, loss)
+            if fidelity_history is not None:
+                fidelity_history.append(1 - loss)
 
             # For PiecewiseConstant, dL/dtheta == dL/du flattened (Jacobian is identity).
             return loss, grads.ravel()
+
+        return loss_and_grad
+
+    def solve(self, problem: OptimalControlProblem, initial_param_values, callback=None) -> Result:
+        """Main entry point."""
+        system = problem.system.model
+        # Initial values of parameter vector
+        theta0 = self.parameterization.initial_theta(initial_param_values)
+
+        fidelity_history = []
+        loss_and_grad = self.build_loss_and_grad(problem, fidelity_history)
+
         opt_result = self.optimizer.minimize(
             loss_and_grad,
             x0=theta0,
@@ -124,6 +138,8 @@ class GRAPE(Algorithm):
         optimized_pulses = self.parameterization.to_amplitudes(opt_result.x)
         # TODO: this is neither efficient nor needed for a user in the result; more debugging data - what would be a good way to get it if required?
         # Maybe some kind of meta algorithm data
+        dt = self.parameterization.dt
+        initial_encoded = system.encode_state(problem.objective.initial)
         final_state = self._forward_pass(_step_propagators(system, optimized_pulses, dt), initial_encoded)[-1]
         return Result(
             optimized_pulses=optimized_pulses,
@@ -191,10 +207,3 @@ def define_problem():
     target_state = basis(2, 1)
     objective = StateTransfer(initial_state, target_state)
     return param, OptimalControlProblem(system, objective)
-
-
-if __name__ == "__main__":
-    parameterization, problem = define_problem()
-    solver = GRAPE(parameterization)
-    result = solver.solve(problem)
-    print(result)
