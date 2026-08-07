@@ -37,15 +37,13 @@ class ClosedSystem(System):
         return state.full() # shape (n, 1) for a ket, (n, n) for a gate-synthesis operator
 
     def decode_state(self, arr: np.ndarray) -> Qobj:
-        space = self._H0.dims[0] # Hilbert structure, e.g. [2] or [2, 3]
-        if arr.shape[1] == 1: # ket (state transfer)
-            dims = [space, [1] * len(space)]
-        else: # operator (gate synthesis)
-            dims = [space, space]
-        return Qobj(arr, dims=dims)
+        space = self._H0.dims[0]
+        target_dims = [space, [1] * len(space)]
+        return Qobj(arr, dims=target_dims)
 
-
-        return Qobj(arr, dims=self.dims)
+    def decode_operator(self, arr: np.ndarray) -> Qobj:
+        space = self._H0.dims[0]
+        return Qobj(arr, dims=[space, space])
 
     def control_generators(self):
         return self._motion_controls

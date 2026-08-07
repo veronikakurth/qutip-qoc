@@ -90,11 +90,24 @@ class OpenSystem(System):
     # System representation
 
     def encode_state(self, state: Qobj) -> np.ndarray:
-        return operator_to_vector(state).full() # shape (n**2, 1)
+        print(f"Encoding state of {state}")
+        encoded = operator_to_vector(state).full() # shape (n**2, 1)
+        print(f"Encoded: shape {encoded.shape}")
+        return encoded
 
     def decode_state(self, arr: np.ndarray) -> Qobj:
-        return vector_to_operator(Qobj(arr, dims=self.dims)) # shape (n,n) (DM)
-
+        print(f"Decoding state. Shape of encoded: {arr.shape}")
+        space = self._L0.dims[0][0]
+        op_dims = [space, space] # dims of density operator / channel I/O
+        target_dims = [op_dims, [1]]
+        print(f"Target dims: {target_dims}")
+        return vector_to_operator(Qobj(arr, dims=target_dims))
+    
+    def decode_operator(self, arr: np.ndarray) -> Qobj:
+        space = self._L0.dims[0][0]
+        op_dims = [space, space]
+        return Qobj(arr, dims=[op_dims, op_dims], superrep="super")
+    
     def control_generators(self):
         return self._L_controls
 

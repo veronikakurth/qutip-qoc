@@ -39,6 +39,10 @@ class System(ABC):
         return op.full()
 
     @abstractmethod
+    def decode_operator(self, arr: np.ndarray) -> Qobj:
+        """Dual method to encode_operator, implementation is system-specific"""
+
+    @abstractmethod
     def control_generators(self) -> list[Qobj]:
         """Control operators in the generator space (H_k vs L_k) """
 
