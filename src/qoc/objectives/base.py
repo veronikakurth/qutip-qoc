@@ -31,11 +31,17 @@ class Objective:
         self.target = target
         self.performance_measure = performance_measure
     # TODO: is worth renaming to reflect what is exactly computed
-    def compute(self, current: Qobj) -> float:
-        return self.performance_measure.compute(current, self.target)
+    def compute(self, current: Qobj, target: Qobj = None) -> float:
+        if target:
+            return self.performance_measure.compute(current, target)
+        else:
+            return self.performance_measure.compute(current, self.target)
 
-    def loss(self, current: Qobj) -> float:
-        return 1.0 - self.compute(current)
+    def loss(self, current: Qobj, target: Qobj = None) -> float:
+        if target:
+            return 1.0 - self.compute(current, target)
+        else:
+            return 1.0 - self.compute(current)
 
     def check_compatible(self, system) -> None:
         """Validate this objective against the system it's paired with"""

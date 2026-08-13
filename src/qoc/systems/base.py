@@ -31,8 +31,8 @@ class System(ABC):
 
     # decode_state(encode_state(x)) ~= x
 
-    def encode_operator(self, op: Qobj) -> np.ndarray:
-        return op.full()
+    def encode_operator(self, op: Qobj) -> Qobj:
+        return op
 
     @abstractmethod
     def decode_operator(self, arr: np.ndarray) -> Qobj:

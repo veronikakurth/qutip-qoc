@@ -33,8 +33,8 @@ class ClosedSystem(System):
     # System representation
     state_type: ClassVar[StateType] = "ket"
 
-    def encode_state(self, state: Qobj) -> np.ndarray:
-        return state.full() # shape (n, 1) for a ket, (n, n) for a gate-synthesis operator
+    def encode_state(self, state: Qobj) -> Qobj:
+        return state # shape (n, 1) for a ket, (n, n) for a gate-synthesis operator
 
     def decode_state(self, arr: np.ndarray) -> Qobj:
         space = self._H0.dims[0]

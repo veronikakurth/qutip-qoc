@@ -88,8 +88,8 @@ class OpenSystem(System):
         return obj
 
     # System representation (implementing abstract methods from System)
-    def encode_state(self, state: Qobj) -> np.ndarray:
-        encoded = operator_to_vector(state).full() # shape (n**2, 1)
+    def encode_state(self, state: Qobj) -> Qobj:
+        encoded = operator_to_vector(state) # shape (n**2, 1)
         return encoded
 
     def decode_state(self, arr: np.ndarray) -> Qobj:

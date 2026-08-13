@@ -107,7 +107,7 @@ class GRAPE(Algorithm):
             # Compute forward pass (starting with objective's initial state - pre-encoded)
             forward_evolution = self._forward_pass(Us, initial_encoded)
             co_states = self._backward_pass(Us, target_encoded)
-            loss = objective.loss(forward_evolution[-1])
+            loss = objective.loss(forward_evolution[-1], target_encoded)
             grads = self._gradient(forward_evolution, co_states, controls_encoded, N, dt, dUs, target_encoded)
             
             if fidelity_history is not None:
@@ -181,9 +181,19 @@ class GRAPE(Algorithm):
     
     # TODO: ensure gradient formula is correct with respect to 1) task 2) chosen quality function (~ fidelity)
 
+    def open_gradient(self, co_state, dU, forward_state, final_overlap):
+        dc = co_state.dag() @ dU @ forward_state
+        return float(np.real(dc))
+
+    def closed_gradient(self, co_state, dU, forward_state, final_overlap):
+        dc = co_state.dag() @ dU @ forward_state
+        gradient = - 2 * np.real(np.conj(final_overlap) * dc)
+        return gradient
+
     def _gradient(self, forward_evolution: list[Qobj], co_states: list[Qobj], controls: list[Qobj], N: int, dt: float, dUs: list[Qobj], target: Qobj) -> np.ndarray:
         """Adjoint-method gradient. Requires forward + backward passes."""
         K = len(controls)
+        grad_func = self.open_gradient if target.type == "operator-ket" else self.closed_gradient 
         # Compute scalar product between last co-state and last evolved state
         grads = np.zeros((K, N), dtype=float)
         final_overlap = target.dag() @ forward_evolution[-1]
@@ -192,8 +202,7 @@ class GRAPE(Algorithm):
             co_state = co_states[j + 1]
             for k, Gc in enumerate(controls):
                 dU = dUs[j][k]
-                dc = co_state.dag() @ dU @ forward_state
-                gradient = - 2 * np.real(np.conj(final_overlap) * dc)
+                gradient = grad_func(co_state, dU, forward_state, final_overlap)
                 grads[k, j] = gradient
         return grads
 
