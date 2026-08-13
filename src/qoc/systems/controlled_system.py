@@ -18,6 +18,7 @@ class ControlledSystem:
 
     def __init__(self, model: System):
         # Prefer the typed constructors below over calling __init__ directly.
+        # Calling __init__ is reserved for power usage cases when a user interacts with internal System hierarchy (which implies custom class implementation)
         self._model = model
 
     @classmethod
@@ -44,10 +45,10 @@ class ControlledSystem:
         """Open system from a pre-assembled drift Liouvillian ``L0``.
 
         Alternative to `open` instead of drift + collapse operators, the
-        caller supplies the drift Liouvillian directly (with any dissipation
-        already folded in), mirroring how qutip's ``mesolve`` accepts a
-        Liouvillian in place of a Hamiltonian. ``H_controls`` may be plain
-        operators (will be promoted internally) or control superoperators.
+        caller supplies the drift Liouvillian directly.
+        This mirrors how qutip's ``mesolve`` accepts a
+        Liouvillian in place of Hamiltonians. 
+        ``H_controls`` may be operators or superoperators.
         """
         return cls(OpenSystem.from_liouvillian(L0=L0, H_controls=H_controls))
 
@@ -86,14 +87,15 @@ class ControlledSystem:
 
     def build_generator_time_j(self, control_amplitudes, j: int):
         return self._model.build_generator_time_j(control_amplitudes, j)
+    
+    # TODO: will be needed for 
+    # def default_simulator(self):
+    #     """Return the Simulator appropriate for this system's dynamics."""
+    #     # Import lazily to avoid an import cycle
+    #     # between systems and dynamics modules
+    #     from qoc.dynamics.simulator import default_simulator_for
 
-    def default_simulator(self):
-        """Return the Simulator appropriate for this system's dynamics."""
-        # Import lazily to avoid an import cycle
-        # between systems and dynamics modules
-        from qoc.dynamics.simulator import default_simulator_for
-
-        return default_simulator_for(self._model)
+    #     return default_simulator_for(self._model)
 
     def __repr__(self) -> str:
         kind = type(self._model).__name__

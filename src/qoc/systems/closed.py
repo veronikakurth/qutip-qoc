@@ -45,9 +45,10 @@ class ClosedSystem(System):
         space = self._H0.dims[0]
         return Qobj(arr, dims=[space, space])
 
-    def control_generators(self):
+    def control_generators(self) -> list[Qobj]:
         return self._motion_controls
 
+    # Is not used in GRAPE, may prove useful in other algorithms
     def build_generator(
         self, u: np.ndarray
     ) -> list:

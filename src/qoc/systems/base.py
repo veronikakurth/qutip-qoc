@@ -7,14 +7,10 @@ from qutip import Qobj
 StateType = Literal["ket", "dm"]
 
 class System(ABC):
-    """Physics of the controlled system.
-
-    Concrete subclasses (ClosedSystem, OpenSystem, ...) must expose the
-    control-affine Hamiltonian H(t) = H0 + sum_k u_k(t) H_k in qutip's
-    nested-list format, so the same Simulator implementations can drive
-    either sesolve or mesolve.
     """
-    
+    Defines physics of the controlled system.
+    Non-user-facing class.
+    """
 
     def __init__(self, H0: Qobj, H_controls: list[Qobj]):
         self._validate_hamiltonians(H0, H_controls)
@@ -48,7 +44,9 @@ class System(ABC):
 
     @abstractmethod
     def motion_generator_time_j(self, u: np.ndarray, j: int) -> Qobj:
-        """ """
+        """To be used for propagator computation based on drift term,
+        time-dependent control terms with injected pulse and pre-factor term,
+        which depends on system type"""
     
     @property
     def n_controls(self) -> int:
@@ -63,7 +61,7 @@ class System(ABC):
         return self._H_controls
     
     @property
-    def dims(self) -> int: # TODO: align type with qutip core
+    def dims(self) -> int:
         return self._H0.dims
 
     @property
@@ -77,13 +75,12 @@ class System(ABC):
         Parameters
         ----------
         control_amplitudes : np.ndarray
-            Shape (n_controls, n_timesteps). Coefficient samples on the
-            solver's `tlist` grid.
+            Shape (n_controls, n_timesteps).
 
         Returns
         -------
         list
-            ``[H0, [H_1, u_1], [H_2, u_2], ...]`` consumable by sesolve/mesolve.
+            ``[H0, [H_1, u_1], [H_2, u_2], ...]``
         """
 
     def _validate_hamiltonians(self, H0: Qobj, H_controls: list) -> None:

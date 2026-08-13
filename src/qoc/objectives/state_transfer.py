@@ -23,7 +23,6 @@ class StateTransfer(Objective):
     ):
         if performance_measure is None:
             performance_measure = StateFidelity()
-            # TODO: if qutip.fidelity doesn't work with open systems, we might want to introduce our own wrapper that tackles both open and closed systems, in order to leave Objective agnostic of the system type
         else:
             if not isinstance(performance_measure, PerformanceMeasure):
                 raise TypeError(
@@ -35,7 +34,7 @@ class StateTransfer(Objective):
     def check_compatible(self, system) -> None:
         super().check_compatible(system)
         type_ = state_type(self.initial)
-        if type_ != system.state_type:  # TODO: add property to system interface
+        if type_ != system.state_type:
             raise ValueError(
                 f"System expects {system.state_type} states, but objective provides {type_}"
             )

@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Union
 from qutip import Qobj, basis, sigmax, sigmaz
-from scipy.linalg import expm
+from scipy.linalg import expm, expm_frechet
 from dataclasses import dataclass, field, fields
 
 from qoc.algorithms.base import Algorithm
@@ -26,12 +26,18 @@ def _step_propagators(system: System, u: np.ndarray, dt: float) -> list[np.ndarr
     # Infer number of time steps from control amplitudes shape
     steps_n = u.shape[1]
     propagators = [None] * steps_n
+    # For derivatives with respect to control amplitudes at every time slice
+    propagators_du = [None] * steps_n
     for j in range(steps_n):
         # Get a motion generator for time j (time-dependent Hamiltonian/Liouvillian with pulse and prefactor term)
         G_j = system.motion_generator_time_j(u, j)
-        # Compute matrix exponential
-        propagators[j] = expm(system.encode_operator(G_j) * dt)
-    return propagators
+        G_j = system.encode_operator(G_j)
+        dG_j = system.control_generators()
+        dG_j = system.encode_operator(sum(dG_j))
+        # Compute matrix exponential # TODO: maybe at this point we already can get dU?
+        #propagators[j] = expm_frechet(system.encode_operator(G_j) * dt)
+        propagators[j], propagators_du[j] = expm_frechet(G_j * dt, dG_j * dt)
+    return propagators, propagators_du
 
 # TODO: relocate it onto optimizer later
 @dataclass
@@ -93,15 +99,15 @@ class GRAPE(Algorithm):
             u = self.parameterization.to_amplitudes(theta)
             # GRAPE-specific steps
             # Compute propagators for every time step
-            Us = _step_propagators(system, u, dt) # -> list[Qobj]
+            Us, dUs = _step_propagators(system, u, dt) # -> list[Qobj]
             # Compute forward pass (starting with objective's initial state - pre-encoded)
             forward_evolution = self._forward_pass(Us, initial_encoded)
             co_states = self._backward_pass(Us, target_encoded)
             # A slight inconsistency: here, we operate on Qobj since Objective.loss is defined on it
             # As long as performance is not a problem we leave it this way
             loss = objective.loss(system.decode_state(forward_evolution[-1]))
-            grads = self._gradient(forward_evolution, co_states, controls_encoded, N, dt)
-
+            grads = self._gradient(forward_evolution, co_states, controls_encoded, N, dt, dUs, objective.target)
+            
             if fidelity_history is not None:
                 fidelity_history.append(1 - loss)
 
@@ -140,7 +146,7 @@ class GRAPE(Algorithm):
         # Maybe some kind of meta algorithm data
         dt = self.parameterization.dt
         initial_encoded = system.encode_state(problem.objective.initial)
-        final_state = self._forward_pass(_step_propagators(system, optimized_pulses, dt), initial_encoded)[-1]
+        final_state = self._forward_pass(_step_propagators(system, optimized_pulses, dt)[0], initial_encoded)[-1]
         return Result(
             optimized_pulses=optimized_pulses,
             fidelity=1 - opt_result.fun,
@@ -172,22 +178,23 @@ class GRAPE(Algorithm):
             co_states[j] = adj(propagators[j]) @ co_states[j + 1]
         return co_states
     
-    # TODO: make signature more specific
-    # TODO: try to make use of more Qobj specific functions to become more agnostic of backend
-    def _gradient(self, forward_evolution: list[np.ndarray], co_states: list[np.ndarray], controls: list[np.ndarray], N: int, dt: float) -> np.ndarray:
+    # TODO: ensure gradient formula is correct with respect to 1) task 2) chosen quality function (~ fidelity)
+
+    def _gradient(self, forward_evolution: list[np.ndarray], co_states: list[np.ndarray], controls: list[np.ndarray], N: int, dt: float, dUs: list, target) -> np.ndarray:
         """Adjoint-method gradient. Requires forward + backward passes."""
         K = len(controls)
         # Compute scalar product between last co-state and last evolved state
-        c = (adj(co_states[-1]) @ forward_evolution[-1]).item()  # <phi|psi_N>
         grads = np.zeros((K, N), dtype=float)
         for j in range(N):
-            psi_j = forward_evolution[j]
-            co_state_jp1 = co_states[j + 1]
-            for k, Hc in enumerate(controls):
-                # Scalar product between current co state and current evolved state
-                inner = (adj(co_state_jp1) @ Hc @ psi_j).item()
-                # TODO: for overlap, ensure the formula is right for both system type -> infer it from PM/Objective?
-                grads[k, j] = -2.0 * dt * np.imag(np.conj(c) * inner)
+            forward_state = Qobj(forward_evolution[j])
+            co_state = Qobj(co_states[j + 1])
+            for k, Gc in enumerate(controls):
+                dU = Qobj(dUs[j])
+                overlap = forward_state.overlap(target)
+                dc = (co_state.dag() @ dU) @ forward_state 
+                #import pdb; pdb.set_trace()
+                gradient = -2 * np.real(overlap * dc)
+                grads[k, j] = gradient
         return grads
 
 

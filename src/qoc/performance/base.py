@@ -18,6 +18,7 @@ class PerformanceMeasure(ABC):
         pass
 
 
+# TODO: think of the way not to use the class by users and operate on functions instead
 class FunctionalPerformanceMeasure(PerformanceMeasure):
     """
     Wraps a user-supplied callable as a PerformanceMeasure.

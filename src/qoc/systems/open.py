@@ -12,11 +12,12 @@ class OpenSystem(System):
 
     Liouville space, dim n^2
 
-    There are two equivalent ways to build one:
+    Two equivalent ways to build an open system are supported:
 
     * **component form** (``__init__``): a drift ``H0``, control Hamiltonians
-      ``H_controls`` and collapse operators ``c_ops``. Internally, the generator is
-      assembled ``L0 = liouvillian(H0, c_ops)`` with each control
+      ``H_controls`` and collapse operators ``c_ops``. 
+      Internally, the generator will be assembled as
+      ``L0 = liouvillian(H0, c_ops)`` with each control
       converted to a Liouvillian via ``liouvillian(H_k)``.
     * **pre-assembled form** (``from_liouvillian``): a drift Liouvillian ``L0``
       (a superoperator) plus controls, mirroring how qutip's ``mesolve`` accepts
@@ -27,8 +28,7 @@ class OpenSystem(System):
     
     Note on empty ``c_ops``:
     We consider an open system with empty ``c_ops`` a valid case.
-    For purely coherent evolution of a pure state, however,
-    ``ClosedSystem`` should be preferred.
+    # TODO: should we?
     """
 
     state_type: ClassVar[StateType] = "dm"
@@ -53,6 +53,7 @@ class OpenSystem(System):
         super().__init__(H0, H_controls)
         c_ops = self._validate_c_ops(c_ops)
         self._c_ops = c_ops
+        # Map user-passed arguments to an internal super-operator representation for drift and controls
         self._L0 = liouvillian(H0, c_ops)
         self._L_controls = [liouvillian(H_k) for H_k in H_controls]
 
@@ -68,12 +69,10 @@ class OpenSystem(System):
         ----------
         L0 : Qobj | QobjEvo
             Drift Liouvillian (a superoperator). Any dissipation is assumed to
-            be already folded in, so no ``c_ops`` are taken separately.
+            be already captured in it, so no ``c_ops`` are taken separately.
         H_controls : list[Qobj]
-            Control terms. Plain operators are lifted with ``liouvillian``;
-            terms that are already superoperators are used as given (e.g. a
-            control that modulates a dissipation rate rather than a coherent
-            term).
+            Control terms. Plain operators are promoted via ``liouvillian``;
+            terms that are already superoperators are used as given.
         """
         if not (isinstance(L0, (Qobj, QobjEvo)) and L0.issuper):
             raise TypeError("L0 must be a superoperator (Liouvillian)")
@@ -87,20 +86,16 @@ class OpenSystem(System):
             H_k if H_k.issuper else liouvillian(H_k) for H_k in H_controls
         ]
         return obj
-    # System representation
 
+    # System representation (implementing abstract methods from System)
     def encode_state(self, state: Qobj) -> np.ndarray:
-        print(f"Encoding state of {state}")
         encoded = operator_to_vector(state).full() # shape (n**2, 1)
-        print(f"Encoded: shape {encoded.shape}")
         return encoded
 
     def decode_state(self, arr: np.ndarray) -> Qobj:
-        print(f"Decoding state. Shape of encoded: {arr.shape}")
         space = self._L0.dims[0][0]
         op_dims = [space, space] # dims of density operator / channel I/O
         target_dims = [op_dims, [1]]
-        print(f"Target dims: {target_dims}")
         return vector_to_operator(Qobj(arr, dims=target_dims))
     
     def decode_operator(self, arr: np.ndarray) -> Qobj:
@@ -113,12 +108,13 @@ class OpenSystem(System):
 
     @property
     def c_ops(self) -> list[Qobj | QobjEvo]:
-        """Collapse operators (component form). Empty for the Liouvillian form,
-        where dissipation is already folded into the drift Liouvillian."""
+        """Collapse operators (component form). 
+        Empty in case the system was initiatilized via ```from_liouvillian``"""
         return self._c_ops
-
+    
+    # Is not used in GRAPE, may prove useful in other algorithms
     def build_generator(self, u: np.ndarray) -> list:
-        """Time-dependent Liouvillian in qutip's nested-list (superoperator) form.
+        """Time-dependent Liouvillian in qutip's nested-list form (with superoperators).
         """
         L = [self._L0]
         for k in range(self.n_controls):
