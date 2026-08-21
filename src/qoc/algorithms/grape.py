@@ -38,6 +38,17 @@ def _step_propagators(system: System, u: np.ndarray, dt: float) -> tuple[list[Qo
             propagators_du[j][k] = system.decode_operator(dU)
     return propagators, propagators_du
 
+def _real_trace(overlap) -> float:
+    """Re tr(overlap), the Hilbert-Schmidt inner product of the adjoint chain.
+
+    States (kets, vectorized density matrices) give a 1x1 product, which qutip
+    collapses to a plain scalar; gate synthesis gives a d x d Qobj that has to
+    be traced. This is a representation detail of qutip, not a branch on the
+    objective type.
+    """
+    return float(np.real(overlap.tr() if isinstance(overlap, Qobj) else overlap))
+
+
 # TODO: relocate it onto optimizer later
 @dataclass
 class OptimizerParams:
@@ -89,7 +100,6 @@ class GRAPE(Algorithm):
         # Encode boundary conditions from Qobj into numerical representation (np.ndarray)
         initial_encoded = system.encode_state(objective.initial)
         target_encoded = system.encode_state(objective.target)
-        controls_encoded = [system.encode_operator(g) for g in system.control_generators()]
         # Extract info from parameterization needed for algorithm
         dt = self.parameterization.dt
         N = self.parameterization.n_timesteps
@@ -101,9 +111,14 @@ class GRAPE(Algorithm):
             Us, dUs = _step_propagators(system, u, dt) # -> list[Qobj]
             # Compute forward pass (starting with objective's initial state - pre-encoded)
             forward_evolution = self._forward_pass(Us, initial_encoded)
-            co_states = self._backward_pass(Us, target_encoded)
-            loss = objective.loss(forward_evolution[-1], target_encoded)
-            grads = self._gradient(forward_evolution, co_states, controls_encoded, N, dt, dUs, target_encoded)
+            final = forward_evolution[-1]
+            loss = objective.loss(final, target_encoded)
+            # Seed the backward pass with d(loss)/d(final state). The measure
+            # owns that factor; GRAPE owns only the chain rule below.
+            co_states = self._backward_pass(
+                Us, objective.loss_gradient(final, target_encoded)
+            )
+            grads = self._gradient(forward_evolution, co_states, dUs, N)
             
             if fidelity_history is not None:
                 fidelity_history.append(1 - loss)
@@ -144,13 +159,20 @@ class GRAPE(Algorithm):
         dt = self.parameterization.dt
         initial_encoded = system.encode_state(problem.objective.initial)
         final_state = self._forward_pass(_step_propagators(system, optimized_pulses, dt)[0], initial_encoded)[-1]
+        # Decode with the inverse of what encode_state produced: a column
+        # vector is a state (ket, or vectorized density matrix), a square block
+        # is a gate. TODO: this dispatch arguably belongs on System.
+        decode = (
+            system.decode_state if final_state.shape[1] == 1
+            else system.decode_operator
+        )
         return Result(
             optimized_pulses=optimized_pulses,
             fidelity=1 - opt_result.fun,
             n_iters=opt_result.nit,
             optimizer_info=opt_result,
             history=fidelity_history,
-            final_state=system.decode_state(final_state)
+            final_state=decode(final_state)
         )
     # TODO: adjust signatures: a lot of data comes into the methods encoded w.r.t. system type
     def _forward_pass(self, propagators: list[Qobj], initial_state: Qobj) -> list[Qobj]:
@@ -163,53 +185,40 @@ class GRAPE(Algorithm):
             forward_evolution[j + 1] = U @ forward_evolution[j]
         return forward_evolution
 
-    def _backward_pass(self, propagators: list[Qobj], target_state: Qobj):
-        # Based on previously computed step propagators and target state,
-        # go "back in time" by computing co-states from target to the beginning
-        # of the evolution
+    def _backward_pass(self, propagators: list[Qobj], final_costate: Qobj):
+        # Based on previously computed step propagators and the seed co-state,
+        # go "back in time" by computing co-states from the end to the
+        # beginning of the evolution. The seed is d(loss)/d(final state).
         N = len(propagators)
-        co_states = [None] * (N + 1) # Plus one since we include target state
-        co_states[N] = target_state
+        co_states = [None] * (N + 1) # Plus one since we include the seed
+        co_states[N] = final_costate
         for j in reversed(range(N)):
             co_states[j] = propagators[j].dag() @ co_states[j + 1]
         return co_states
     
-    # Both gradient functions return dLoss/du (not dF/du), since Loss = 1 - F is
-    # what the optimizer minimizes. Keep the sign conventions of the two in step:
-    # they must match the corresponding branch of StateFidelity.compute.
-    #
-    # In both, dc = <co_state[j+1]| dU_j |forward[j]> is the derivative of the
-    # final complex overlap <t|psi(T)> (or <<rho_t|rho(T)>>) w.r.t. u_kj.
+    def _gradient(self, forward_evolution: list[Qobj], co_states: list[Qobj], dUs: list[list[Qobj]], N: int) -> np.ndarray:
+        """Adjoint-method gradient of the loss. Requires forward + backward passes.
 
-    def open_gradient(self, co_state, dU, forward_state, final_overlap, target_scale):
-        # F = Re<<t|rho>> / tr(rho_t**2)  ->  dLoss = -Re(dc) / tr(rho_t**2)
-        dc = co_state.dag() @ dU @ forward_state
-        return -float(np.real(complex(dc))) / target_scale
+        The gradient factorizes as
 
-    def closed_gradient(self, co_state, dU, forward_state, final_overlap, target_scale):
-        # F = |<t|psi>|**2  ->  dLoss = -2 Re(conj(c) dc)
-        dc = co_state.dag() @ dU @ forward_state
-        gradient = - 2 * np.real(np.conj(final_overlap) * dc)
-        return gradient
+            d(loss)/du_kj = Re < d(loss)/d(final), d(final)/du_kj >
 
-    def _gradient(self, forward_evolution: list[Qobj], co_states: list[Qobj], controls: list[Qobj], N: int, dt: float, dUs: list[Qobj], target: Qobj) -> np.ndarray:
-        """Adjoint-method gradient of the loss. Requires forward + backward passes."""
-        K = len(controls)
-        is_open = target.type == "operator-ket"
-        grad_func = self.open_gradient if is_open else self.closed_gradient
-        # Normalization that makes F == 1 at the target; only the open branch
-        # uses it, and it must agree with StateFidelity._target_norm_sq.
-        target_scale = float(target.norm()) ** 2 if is_open else 1.0
-        # Compute scalar product between last co-state and last evolved state
+        The measure supplies the left factor (it seeded ``co_states[N]``); this
+        is the right one. One formula covers every objective type:
+
+        * kets and vectorized density matrices give a 1x1 product, whose trace
+          is the scalar itself;
+        * gate synthesis gives a d x d product, whose trace is the
+          Hilbert-Schmidt inner product the expression always meant.
+        """
+        K = len(dUs[0])
         grads = np.zeros((K, N), dtype=float)
-        final_overlap = target.dag() @ forward_evolution[-1]
         for j in range(N):
             forward_state = forward_evolution[j]
             co_state = co_states[j + 1]
-            for k, Gc in enumerate(controls):
-                dU = dUs[j][k]
-                gradient = grad_func(co_state, dU, forward_state, final_overlap, target_scale)
-                grads[k, j] = gradient
+            for k in range(K):
+                overlap = co_state.dag() @ dUs[j][k] @ forward_state
+                grads[k, j] = _real_trace(overlap)
         return grads
 
 
