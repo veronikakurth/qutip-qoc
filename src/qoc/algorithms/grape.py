@@ -174,21 +174,32 @@ class GRAPE(Algorithm):
             co_states[j] = propagators[j].dag() @ co_states[j + 1]
         return co_states
     
-    # TODO: ensure gradient formula is correct with respect to 1) task 2) chosen quality function (~ fidelity)
+    # Both gradient functions return dLoss/du (not dF/du), since Loss = 1 - F is
+    # what the optimizer minimizes. Keep the sign conventions of the two in step:
+    # they must match the corresponding branch of StateFidelity.compute.
+    #
+    # In both, dc = <co_state[j+1]| dU_j |forward[j]> is the derivative of the
+    # final complex overlap <t|psi(T)> (or <<rho_t|rho(T)>>) w.r.t. u_kj.
 
-    def open_gradient(self, co_state, dU, forward_state, final_overlap):
+    def open_gradient(self, co_state, dU, forward_state, final_overlap, target_scale):
+        # F = Re<<t|rho>> / tr(rho_t**2)  ->  dLoss = -Re(dc) / tr(rho_t**2)
         dc = co_state.dag() @ dU @ forward_state
-        return float(np.real(dc))
+        return -float(np.real(complex(dc))) / target_scale
 
-    def closed_gradient(self, co_state, dU, forward_state, final_overlap):
+    def closed_gradient(self, co_state, dU, forward_state, final_overlap, target_scale):
+        # F = |<t|psi>|**2  ->  dLoss = -2 Re(conj(c) dc)
         dc = co_state.dag() @ dU @ forward_state
         gradient = - 2 * np.real(np.conj(final_overlap) * dc)
         return gradient
 
     def _gradient(self, forward_evolution: list[Qobj], co_states: list[Qobj], controls: list[Qobj], N: int, dt: float, dUs: list[Qobj], target: Qobj) -> np.ndarray:
-        """Adjoint-method gradient. Requires forward + backward passes."""
+        """Adjoint-method gradient of the loss. Requires forward + backward passes."""
         K = len(controls)
-        grad_func = self.open_gradient if target.type == "operator-ket" else self.closed_gradient 
+        is_open = target.type == "operator-ket"
+        grad_func = self.open_gradient if is_open else self.closed_gradient
+        # Normalization that makes F == 1 at the target; only the open branch
+        # uses it, and it must agree with StateFidelity._target_norm_sq.
+        target_scale = float(target.norm()) ** 2 if is_open else 1.0
         # Compute scalar product between last co-state and last evolved state
         grads = np.zeros((K, N), dtype=float)
         final_overlap = target.dag() @ forward_evolution[-1]
@@ -197,7 +208,7 @@ class GRAPE(Algorithm):
             co_state = co_states[j + 1]
             for k, Gc in enumerate(controls):
                 dU = dUs[j][k]
-                gradient = grad_func(co_state, dU, forward_state, final_overlap)
+                gradient = grad_func(co_state, dU, forward_state, final_overlap, target_scale)
                 grads[k, j] = gradient
         return grads
 
