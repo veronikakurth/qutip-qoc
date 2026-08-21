@@ -17,6 +17,10 @@ class PerformanceMeasure(ABC):
     def compute(self, current: Qobj, target: Qobj) -> float:
         pass
 
+    def gradient(self, current: Qobj, target: Qobj) -> float:
+        """Gradient of `compute` with respect to `current`"""
+        raise NotImplementedError()
+
 
 # TODO: think of the way not to use the class by users and operate on functions instead
 class FunctionalPerformanceMeasure(PerformanceMeasure):
