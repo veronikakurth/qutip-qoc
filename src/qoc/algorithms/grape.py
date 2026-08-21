@@ -15,10 +15,6 @@ from qoc.systems.base import System
 from qoc.systems.controlled_system import ControlledSystem
 
 
-def adj(A):
-    return np.conj(A).T
-
-
 # Dev note: we pass system here since we need its motion generator method
 def _step_propagators(system: System, u: np.ndarray, dt: float) -> tuple[list[Qobj], list[list[Qobj]]]:
     """Calculate per-step unitaries U_j = expm(prefactor * H_j * dt).
@@ -35,7 +31,6 @@ def _step_propagators(system: System, u: np.ndarray, dt: float) -> tuple[list[Qo
         G_j = system.motion_generator_time_j(u, j)
         A = (G_j * dt).full()
         U = expm(A)
-
         propagators[j] = system.decode_operator(U)
         for k, G_k in enumerate(controls):
             dA = (G_k * dt).full()
