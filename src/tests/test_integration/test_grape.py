@@ -8,37 +8,38 @@ from qoc.objectives import StateTransfer
 from qoc.pulse import PiecewiseConstant
 
 
-# @pytest.fixture
-# def x_open_system(): # fake example (for now, to test against superficial interface problems)
-#     return ControlledSystem.open(H0=0 * qutip.sigmax(), H_controls=[qutip.sigmax()])
-# 
-# def test_state_transfer_single_qubit_open_system(x_open_system):
-#     # Testing GRAPE for a state transfer on a single qubit for which
-#     # an analytical solution is known
-#     system = x_open_system
-#     T = 10 
-#     N = 10
-#     times = np.linspace(0, T, N, endpoint=False)
-#     np.random.seed(0)
-# 
-#     K = system.n_controls
-#     initial_pulse = np.random.uniform(-0.1, 0.1, (K, N))
-#     param = PiecewiseConstant(K, times=times)
-#     dt = param.dt
-#     initial_state = qutip.ket2dm(qutip.basis(2, 0)) # start in |0><0|
-#     target_state = qutip.ket2dm((qutip.basis(2,0) + qutip.basis(2,1)).unit())   # target |+><+|
-#     # By default, state fidelity is used as a performance measure in a state transfer task
-#     objective = StateTransfer(initial_state, target_state)
-#     control_problem = OptimalControlProblem(system, objective)
-#     algorithm = GRAPE(parameterization=param)
-#     result = algorithm.solve(control_problem, initial_pulse)
-#     #import pdb; pdb.set_trace()
-#     assert result.fidelity > 1.0 - 1e-4
-#     pulse_area = np.sum(result.optimized_pulses) * dt
-#     reduced = (pulse_area + np.pi) % (2*np.pi) - np.pi # reduce to (-pi, pi]
-#     assert np.isclose(abs(reduced), np.pi/2, atol=1e-2)
+@pytest.fixture
+def x_open_system(): # Taken from qutip-qoc's notebooks
+    E1, E2 = 1.0, 2.0 # Energy levels
+    gamma = 0.1 # Amplitude damping
+    c_ops = [np.sqrt(gamma) * qutip.sigmam()]
+    H0 = qutip.Qobj(np.diag([E1, E2]))
+    Hc = [qutip.sigmax()]
+    return ControlledSystem.open(H0=H0, H_controls=Hc, c_ops=c_ops)
 
-# TODO: group by system types and tasks
+def test_state_transfer_single_qubit_open_system(x_open_system):
+    # Testing GRAPE for a state transfer on a single qubit for which
+    # an analytical solution is known
+    system = x_open_system
+    T = 2 * np.pi
+    N = 250
+    times = np.linspace(0, T, N, endpoint=False)
+    np.random.seed(0)
+
+    K = system.n_controls
+    initial_pulse = np.random.uniform(-0.1, 0.1, (K, N))
+    param = PiecewiseConstant(K, times=times)
+    dt = param.dt
+    initial_state = qutip.ket2dm(qutip.basis(2, 0)) # start in |0><0|
+    target_state = qutip.ket2dm(qutip.basis(2, 1))
+    # By default, state fidelity is used as a performance measure in a state transfer task
+    objective = StateTransfer(initial_state, target_state)
+    control_problem = OptimalControlProblem(system, objective)
+    algorithm = GRAPE(parameterization=param)
+    result = algorithm.solve(control_problem, initial_pulse)
+    assert result.fidelity > 1.0 - 1e-4
+
+#TODO: group by system types and tasks
 @pytest.fixture
 def x_closed_system():
     return ControlledSystem.closed(H0=0 * qutip.sigmax(), H_controls=[qutip.sigmax()])
