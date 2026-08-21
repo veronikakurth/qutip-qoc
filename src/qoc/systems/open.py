@@ -78,6 +78,8 @@ class OpenSystem(System):
             raise TypeError("L0 must be a superoperator (Liouvillian)")
 
         obj = cls.__new__(cls)  # bypass component-form validation in __init__
+        # No component-form Hamiltonian exists on this path. Nothing reads
+        # _H0 on OpenSystem: drift/dims/shape are derived from _L0 below.
         obj._H0 = None
         obj._H_controls = list(H_controls)
         obj._c_ops = []
@@ -105,6 +107,25 @@ class OpenSystem(System):
     
     def control_generators(self):
         return self._L_controls
+
+    # Derived from _L0, not _H0, so that both construction paths agree.
+    # (from_liouvillian has no component-form H0 to fall back on.)
+
+    @property
+    def drift(self) -> Qobj:
+        """Drift Liouvillian, i.e. the drift term of ``build_generator``."""
+        return self._L0
+
+    @property
+    def dims(self) -> list:
+        # _L0.dims is [hilbert_dims, hilbert_dims]; its first entry is the
+        # Hilbert-space dims pair [[n], [n]] we owe callers.
+        return self._L0.dims[0]
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        n = int(np.prod(self._L0.dims[0][0]))
+        return (n, n)
 
     @property
     def c_ops(self) -> list[Qobj | QobjEvo]:

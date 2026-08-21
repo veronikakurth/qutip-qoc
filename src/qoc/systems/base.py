@@ -53,19 +53,31 @@ class System(ABC):
         return len(self._H_controls)
     
     @property
-    def drift(self):
+    def drift(self) -> Qobj:
+        """Drift term of ``build_generator``, in this system's generator space.
+
+        ``H0`` for a closed system, ``L0`` for an open one. Every concrete
+        System must supply this on every construction path.
+        """
         return self._H0
 
     @property
-    def controls(self):
+    def controls(self) -> list[Qobj]:
         return self._H_controls
-    
+
     @property
-    def dims(self) -> int:
+    def dims(self) -> list:
+        """Hilbert-space dims of the controlled system, as ``[[n], [n]]``.
+
+        Always the *Hilbert* space, never the Liouville space, so that
+        ``Objective.check_compatible`` can compare ``dims[0]`` against the
+        dims of a ket or density matrix regardless of system type.
+        """
         return self._H0.dims
 
     @property
-    def shape(self):
+    def shape(self) -> tuple[int, int]:
+        """Hilbert-space shape of the controlled system."""
         return self._H0.shape
 
     @abstractmethod

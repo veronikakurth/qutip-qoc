@@ -84,7 +84,7 @@ class GRAPE(Algorithm):
 
         If `fidelity_history` is passed, `1 - loss` is appended on every call.
         """
-        system = problem.system.model
+        system = problem.system
         objective = problem.objective
         # Encode boundary conditions from Qobj into numerical representation (np.ndarray)
         initial_encoded = system.encode_state(objective.initial)
@@ -115,7 +115,7 @@ class GRAPE(Algorithm):
 
     def solve(self, problem: OptimalControlProblem, initial_param_values, callback=None) -> Result:
         """Main entry point."""
-        system = problem.system.model
+        system = problem.system
         # Initial values of parameter vector
         theta0 = self.parameterization.initial_theta(initial_param_values)
 
