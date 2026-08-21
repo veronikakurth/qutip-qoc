@@ -12,7 +12,9 @@ class StateTransfer(Objective):
 
     Both initial and target must be kets (pure states) or density matrices (mixed states)
     with matching dimensions.
-    If a performance measure is not selected, StateFidelity is chosen by default.
+    If a performance measure is not selected, the state-fidelity variant
+    matching the states is chosen: ClosedStateFidelity for kets,
+    OpenStateFidelity for density matrices.
     """
 
     def __init__(
@@ -21,14 +23,14 @@ class StateTransfer(Objective):
         target: Qobj,
         performance_measure: None | PerformanceMeasure = None,
     ):
+        validate_states(initial, target)
         if performance_measure is None:
-            performance_measure = StateFidelity()
+            performance_measure = state_fidelity_for(state_type(initial))
         else:
             if not isinstance(performance_measure, PerformanceMeasure):
                 raise TypeError(
                     f"Expected PerformanceMeasure as type of performance_measure, got={type(performance_measure)}"
                 )
-        validate_states(initial, target)
         super().__init__(initial, target, performance_measure)
 
     def check_compatible(self, system) -> None:
