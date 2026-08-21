@@ -1,7 +1,7 @@
 from qutip import Qobj
 
 from qoc.performance.base import PerformanceMeasure
-from qoc.performance.state_fidelity import StateFidelity
+from qoc.performance.state_fidelity import state_fidelity_for
 from qoc.utils.objective_helpers import validate_states, state_type
 from .base import Objective
 
