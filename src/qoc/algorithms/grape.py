@@ -14,18 +14,18 @@ from qoc.pulse.parameterizations import PiecewiseConstant
 from qoc.systems.base import System
 from qoc.systems.controlled_system import ControlledSystem
 
-
-# Dev note: we pass system here since we need its motion generator method
+# TODO: the output is a bit of a monster right now. Firstly, it's inefficient to hold all the Qobjs in memory (replace list with generator?), secondly, a tuple of lists is a bit too much - can we simplify it a bit?
 def _step_propagators(system: System, u: np.ndarray, dt: float) -> tuple[list[Qobj], list[list[Qobj]]]:
     """Calculate per-step unitaries U_j = expm(prefactor * H_j * dt).
-       Prefactor term depends on the system type"""
-    # Infer number of time steps from control amplitudes shape
+       Prefactor term depends on the system type and is already included in ``System.motion_generator_time_j``'s
+       output."""
     steps_n = u.shape[1]
     controls = system.control_generators()
     K = len(controls)
 
     propagators = [None] * steps_n
     propagators_du = [[None] * K for _ in range(steps_n)]
+
     for j in range(steps_n):
         # Get a motion generator for time j (time-dependent Hamiltonian/Liouvillian with pulse and prefactor term)
         G_j = system.motion_generator_time_j(u, j)
@@ -38,8 +38,10 @@ def _step_propagators(system: System, u: np.ndarray, dt: float) -> tuple[list[Qo
             propagators_du[j][k] = system.decode_operator(dU)
     return propagators, propagators_du
 
+
 def _real_trace(overlap) -> float:
-    """Re tr(overlap), the Hilbert-Schmidt inner product of the adjoint chain.
+    """Helper function:
+    Re tr(overlap), the Hilbert-Schmidt inner product of the adjoint chain.
 
     States (kets, vectorized density matrices) give a 1x1 product, which qutip
     collapses to a plain scalar; gate synthesis gives a d x d Qobj that has to
@@ -65,8 +67,8 @@ class OptimizerParams:
         return cls(**d, extra=extra)
 
 
-# The procedure must be compatible with both state transfer and gate synthesis tasks
 class GRAPE(Algorithm):
+    """Is compatible with state transfer objective"""
 
     def __init__(
         self,
@@ -81,7 +83,6 @@ class GRAPE(Algorithm):
                 f"got {type(param).__name__}"
             )
         self.parameterization = parameterization
-        # Set optimizer or instantiate a default one (LBFGS by SciPy)
         self.optimizer = optimizer or ScipyLBFGS()
         self.optimizer_params = OptimizerParams.from_dict(optimizer_params)
 
@@ -168,7 +169,7 @@ class GRAPE(Algorithm):
             history=fidelity_history,
             final_state=decode_fun(final_state)
         )
-    # TODO: do we maybe want to pass a generator of propagators? In order not to load all the propagators into memory at once 
+    # TODO: optimisation: do we maybe want to pass a generator of propagators? In order not to load all the propagators into memory at once 
     # TODO: in Machnes et al paper, check for optimisation techniques on propagation
     def _forward_pass(self, propagators: list[Qobj], initial_state: Qobj) -> list[Qobj]:
         """Do GRAPE's forward pass: 

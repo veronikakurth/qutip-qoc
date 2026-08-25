@@ -21,16 +21,6 @@ class OptimalControlProblem:
             ``ControlledSystem.closed`` / ``.open`` / ``.open_liouvillian``.
         objective : Objective
             Defines initial, target and performance measure.
-        times : np.ndarray
-            Time grid, shape (n_timesteps,). # Time grid sounds too GRAPE specific.
-        initial_parameters : np.ndarray
-            1D initial guess vector in the parameterization chosen by the algorithm.
-            (e.g. flattened amplitudes for piecewise-constant, basis
-            coefficients for Fourier). 
-            For piecewise-constant control, use
-            ``PiecewiseConstant(K, N).initial_theta(amplitudes_2d)``.
-            Algorithms validate its length against their
-            PulseParameterization.n_parameters at solve time.
         """
         self._validate(system, objective)
         self.system = system
