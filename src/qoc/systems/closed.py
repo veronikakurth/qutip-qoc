@@ -35,15 +35,15 @@ class ClosedSystem(System):
 
     def encode_state(self, state: Qobj) -> Qobj:
         return state # shape (n, 1) for a ket, (n, n) for a gate-synthesis operator
-
-    def decode_state(self, arr: np.ndarray) -> Qobj:
+    # TODO: review encoding/decoding strategy for closed systems 
+    def decode_state(self, state: Qobj) -> Qobj:
         space = self._H0.dims[0]
         target_dims = [space, [1] * len(space)]
-        return Qobj(arr, dims=target_dims)
+        return Qobj(state, dims=target_dims)
 
-    def decode_operator(self, arr: np.ndarray) -> Qobj:
+    def decode_operator(self, operator: Qobj) -> Qobj:
         space = self._H0.dims[0]
-        return Qobj(arr, dims=[space, space])
+        return Qobj(operator, dims=[space, space])
 
     def control_generators(self) -> list[Qobj]:
         return self._motion_controls
@@ -52,12 +52,14 @@ class ClosedSystem(System):
     def build_generator(
         self, u: np.ndarray
     ) -> list:
-        """Build the QuTiP time-dependent Hamiltonian list."""
+        """Build the QuTiP time-dependent Hamiltonian list based on 
+        drift and control Hamiltonians, as well as time-dependent control amplitudes."""
         H = [self._H0]
         for k, H_k in enumerate(self._H_controls):
             H.append([H_k, u[k]])
         return H
 
     def motion_generator_time_j(self, u: np.ndarray, j: int) -> Qobj:
+        """Full Hamiltonian with a prefactor term and control amplitudes at time j. """
         H_j = self._H0 + sum(u[k][j] * self._H_controls[k] for k in range(self.n_controls))
         return self._GENERATOR_PREFACTOR * H_j

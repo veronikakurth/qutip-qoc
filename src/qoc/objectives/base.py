@@ -33,6 +33,7 @@ class Objective:
         self.initial = initial
         self.target = target
         self.performance_measure = performance_measure
+    
     def loss(self, current: Qobj, target: Qobj = None) -> float:
         """Scalar the optimizer minimizes; 0.0 at a perfect match."""
         return self.performance_measure.loss(current, self._target_or_own(target))

@@ -28,7 +28,7 @@ class OpenSystem(System):
     
     Note on empty ``c_ops``:
     We consider an open system with empty ``c_ops`` a valid case.
-    # TODO: should we?
+    In this case, the system has the equivalent dynamics as its closed counterpart.
     """
 
     state_type: ClassVar[StateType] = "dm"

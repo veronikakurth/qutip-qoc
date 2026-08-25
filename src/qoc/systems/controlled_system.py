@@ -1,13 +1,4 @@
-"""User-facing constructors for controlled quantum systems.
-
-``ControlledSystem`` is a *namespace of constructors*, not a wrapper: each
-classmethod returns a concrete :class:`~qoc.systems.base.System`. There is
-exactly one interface to the system hierarchy — ``System`` itself — so users,
-algorithms and tests all cross the same seam.
-
-See ``docs/adr/0001-controlled-system-is-a-factory.md`` for why this is a
-factory rather than a facade.
-"""
+"""User-facing constructors for controlled quantum systems."""
 
 from qutip import Qobj
 from qutip.typing import QobjEvoLike
@@ -19,20 +10,12 @@ from .open import OpenSystem
 
 class ControlledSystem:
     """Entry point for building a controlled quantum system.
-
+    
     Pick the constructor that matches your physics::
 
-        ControlledSystem.closed(H0, H_controls)
-        ControlledSystem.open(H0, H_controls, c_ops)
-        ControlledSystem.open_liouvillian(L0, H_controls)
-
-    Each returns a ``System``, which is what ``OptimalControlProblem`` and the
-    algorithms consume. Users normally only touch ``n_controls``, ``dims``,
-    ``drift`` and ``controls`` on the result; the encode/decode and generator
-    methods exist for algorithms.
-
-    To add a new kind of system, subclass ``System`` and instantiate it
-    directly — this class is a convenience, not a required gateway.
+        ControlledSystem.closed(H0, H_controls) -> ClosedSystem
+        ControlledSystem.open(H0, H_controls, c_ops) -> OpenSystem
+        ControlledSystem.open_liouvillian(L0, H_controls) -> OpenSystem
     """
 
     def __init__(self):

@@ -2,7 +2,8 @@
 
 The closed and open forms are different functionals:
 quadratic in the ket, linear in the density matrix.
-Which one applies is decided by the *encoding*, which is ``System``'s knowledge, not a measure's.
+
+Which one applies is decided by the *encoding*, which is ``System``'s knowledge.
 So the choice is made once, when the objective is built and the state type is known.
 """
 
@@ -35,7 +36,7 @@ class StateFidelity(PerformanceMeasure):
 
     @abstractmethod
     def loss_gradient(self, current: Qobj, target: Qobj) -> Qobj:
-        """d(loss)/d(current), in the same encoding as ``current``."""
+        """d(loss)/d(current)."""
 
     def _check_encoding(self, current: Qobj) -> None:
         """Validate if a measure is paired with the correct kind of system."""
@@ -49,7 +50,7 @@ class StateFidelity(PerformanceMeasure):
 
 
 class ClosedStateFidelity(StateFidelity):
-    """Fidelity between kets (closed systems)::
+    """Fidelity between kets (closed systems):
 
         F = |<t|psi>|**2
     """
@@ -62,7 +63,7 @@ class ClosedStateFidelity(StateFidelity):
 
     def loss_gradient(self, current: Qobj, target: Qobj) -> Qobj:
         """loss = 1 - |c|**2 with c = <t|psi>, so
-        d(loss) = -2 Re(conj(c) <t|dpsi>) = Re<-2 c t, dpsi>.
+        d(loss) = -2 Re(conj(c) <t|dpsi>) = Re< -2 c t, dpsi>.
         """
         self._check_encoding(current)
         c = complex(target.dag() @ current)
@@ -70,7 +71,7 @@ class ClosedStateFidelity(StateFidelity):
 
 
 class OpenStateFidelity(StateFidelity):
-    """Fidelity between vectorized density matrices (open systems)::
+    """Fidelity between vectorized density matrices (open systems):
 
         F = Re tr(rho_t^dag rho) / tr(rho_t**2)
 
@@ -88,7 +89,7 @@ class OpenStateFidelity(StateFidelity):
 
     def loss_gradient(self, current: Qobj, target: Qobj) -> Qobj:
         """loss = 1 - Re<<t|rho>> / s is linear in rho, so
-        d(loss) = Re<-t/s, drho>.
+        d(loss) = Re< -t/s, drho>.
         """
         self._check_encoding(current)
         return -target / _target_norm_sq(target)
@@ -103,7 +104,6 @@ def state_fidelity_for(state_type: StateType) -> StateFidelity:
     raise ValueError(
         f"Unknown state_type {state_type!r}; expected 'ket' or 'dm'"
     )
-
 
 def _target_norm_sq(target: Qobj) -> float:
     """tr(rho_t**2); the scale that makes F(rho_t) == 1."""

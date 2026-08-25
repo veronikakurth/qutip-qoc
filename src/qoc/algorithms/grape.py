@@ -43,8 +43,7 @@ def _real_trace(overlap) -> float:
 
     States (kets, vectorized density matrices) give a 1x1 product, which qutip
     collapses to a plain scalar; gate synthesis gives a d x d Qobj that has to
-    be traced. This is a representation detail of qutip, not a branch on the
-    objective type.
+    be traced. 
     """
     return float(np.real(overlap.tr() if isinstance(overlap, Qobj) else overlap))
 
@@ -97,10 +96,11 @@ class GRAPE(Algorithm):
         """
         system = problem.system
         objective = problem.objective
-        # Encode boundary conditions from Qobj into numerical representation (np.ndarray)
-        initial_encoded = system.encode_state(objective.initial)
-        target_encoded = system.encode_state(objective.target)
-        # Extract info from parameterization needed for algorithm
+
+        # Encode boundary conditions
+        initial = system.encode_state(objective.initial)
+        target = system.encode_state(objective.target)
+        # Extract algorithm-specific info from parameterization
         dt = self.parameterization.dt
         N = self.parameterization.n_timesteps
 
@@ -110,28 +110,27 @@ class GRAPE(Algorithm):
             # Compute propagators for every time step
             Us, dUs = _step_propagators(system, u, dt) # -> list[Qobj]
             # Compute forward pass (starting with objective's initial state - pre-encoded)
-            forward_evolution = self._forward_pass(Us, initial_encoded)
+            forward_evolution = self._forward_pass(Us, initial)
             final = forward_evolution[-1]
-            loss = objective.loss(final, target_encoded)
-            # Seed the backward pass with d(loss)/d(final state). The measure
-            # owns that factor; GRAPE owns only the chain rule below.
+            loss = objective.loss(final, target)
+            # Seed the backward pass with d(loss)/d(final state)
             co_states = self._backward_pass(
-                Us, objective.loss_gradient(final, target_encoded)
+                Us, objective.loss_gradient(final, target)
             )
             grads = self._gradient(forward_evolution, co_states, dUs, N)
             
             if fidelity_history is not None:
                 fidelity_history.append(1 - loss)
 
-            # For PiecewiseConstant, dL/dtheta == dL/du flattened (Jacobian is identity).
             return loss, grads.ravel()
 
         return loss_and_grad
 
-    def solve(self, problem: OptimalControlProblem, initial_param_values, callback=None) -> Result:
+    def solve(self, problem: OptimalControlProblem, initial_param_values: np.ndarray, callback=None) -> Result:
         """Main entry point."""
         system = problem.system
-        # Initial values of parameter vector
+
+        # Get initial values of parameter vector
         theta0 = self.parameterization.initial_theta(initial_param_values)
 
         fidelity_history = []
@@ -142,7 +141,6 @@ class GRAPE(Algorithm):
             x0=theta0,
             max_iter=self.optimizer_params.max_iter,
             tol=self.optimizer_params.tol,
-            #bounds=self.parameterization.bounds(),
             **self.optimizer_params.extra
         )
 
@@ -154,15 +152,11 @@ class GRAPE(Algorithm):
             )
 
         optimized_pulses = self.parameterization.to_amplitudes(opt_result.x)
-        # TODO: this is neither efficient nor needed for a user in the result; more debugging data - what would be a good way to get it if required?
-        # Maybe some kind of meta algorithm data
         dt = self.parameterization.dt
         initial_encoded = system.encode_state(problem.objective.initial)
         final_state = self._forward_pass(_step_propagators(system, optimized_pulses, dt)[0], initial_encoded)[-1]
-        # Decode with the inverse of what encode_state produced: a column
-        # vector is a state (ket, or vectorized density matrix), a square block
-        # is a gate. TODO: this dispatch arguably belongs on System.
-        decode = (
+
+        decode_fun = (
             system.decode_state if final_state.shape[1] == 1
             else system.decode_operator
         )
@@ -172,23 +166,27 @@ class GRAPE(Algorithm):
             n_iters=opt_result.nit,
             optimizer_info=opt_result,
             history=fidelity_history,
-            final_state=decode(final_state)
+            final_state=decode_fun(final_state)
         )
-    # TODO: adjust signatures: a lot of data comes into the methods encoded w.r.t. system type
+    # TODO: do we maybe want to pass a generator of propagators? In order not to load all the propagators into memory at once 
+    # TODO: in Machnes et al paper, check for optimisation techniques on propagation
     def _forward_pass(self, propagators: list[Qobj], initial_state: Qobj) -> list[Qobj]:
-        # Start with initial state and compute propagated state for every time step
-        # using previously computed propagators
+        """Do GRAPE's forward pass: 
+        Start with an initial state and propagate it for every time step
+        # using previously computed propagators """
         N = len(propagators)
-        forward_evolution = [None] * (N + 1) # +1 since we include the initial state
+        forward_evolution = [None] * (N + 1) # Plus one since we include the initial state
         forward_evolution[0] = initial_state
         for j, U in enumerate(propagators):
             forward_evolution[j + 1] = U @ forward_evolution[j]
         return forward_evolution
-
+    # TODO: check this formula in Machnes again
     def _backward_pass(self, propagators: list[Qobj], final_costate: Qobj):
-        # Based on previously computed step propagators and the seed co-state,
-        # go "back in time" by computing co-states from the end to the
-        # beginning of the evolution. The seed is d(loss)/d(final state).
+        """Do GRAPE's backward pass:
+        Based on previously computed step propagators and the seed co-state,
+        go "back in time" by computing co-states from the end to the
+        beginning of the evolution. The seed is d(loss)/d(final state).
+        """
         N = len(propagators)
         co_states = [None] * (N + 1) # Plus one since we include the seed
         co_states[N] = final_costate
@@ -203,13 +201,12 @@ class GRAPE(Algorithm):
 
             d(loss)/du_kj = Re < d(loss)/d(final), d(final)/du_kj >
 
-        The measure supplies the left factor (it seeded ``co_states[N]``); this
-        is the right one. One formula covers every objective type:
+        The following objective types are covered:
 
-        * kets and vectorized density matrices give a 1x1 product, whose trace
+        * State transfer: kets and vectorized density matrices give a 1x1 product, whose trace
           is the scalar itself;
-        * gate synthesis gives a d x d product, whose trace is the
-          Hilbert-Schmidt inner product the expression always meant.
+        * Gate synthesis gives a d x d product, whose trace is the
+          Hilbert-Schmidt inner product.
         """
         K = len(dUs[0])
         grads = np.zeros((K, N), dtype=float)

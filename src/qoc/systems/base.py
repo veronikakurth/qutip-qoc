@@ -22,8 +22,9 @@ class System(ABC):
     state_type: ClassVar[StateType]
 
     @abstractmethod
-    def encode_state(self, state: Qobj) -> np.ndarray:
-        """Column-vector representation the propagators act on. Inverse of decode_state""" 
+    def encode_state(self, state: Qobj) -> Qobj:
+        """Depending on the system type,
+           it is either a column-vector representation or identity. Inverse of decode_state""" 
 
     @abstractmethod
     def decode_state(self, arr: np.ndarray) -> Qobj:
