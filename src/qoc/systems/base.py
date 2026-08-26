@@ -48,7 +48,8 @@ class System(ABC):
         """To be used for propagator computation based on drift term,
         time-dependent control terms with injected pulse and pre-factor term,
         which depends on system type"""
-    
+   
+    # TODO: The following properties are the public API to the system: should we keep naming closer to constructor args?
     @property
     def n_controls(self) -> int:
         return len(self._H_controls)

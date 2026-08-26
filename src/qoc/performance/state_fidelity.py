@@ -56,7 +56,8 @@ class ClosedStateFidelity(StateFidelity):
     """
 
     _expected_type = "ket"
-
+    
+    # TODO: decide how to enable phase-sensitive fidelity
     def fidelity(self, current: Qobj, target: Qobj) -> float:
         self._check_encoding(current)
         return float(np.abs(complex(target.dag() @ current)) ** 2)

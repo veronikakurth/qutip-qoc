@@ -33,6 +33,9 @@ class Objective:
         self.initial = initial
         self.target = target
         self.performance_measure = performance_measure
+
+    def __repr__(self):
+        return f"{self.__class__.__repr__}(initial='{self.initial}, \n target='{self.target}'"
     
     def loss(self, current: Qobj, target: Qobj = None) -> float:
         """Scalar the optimizer minimizes; 0.0 at a perfect match."""

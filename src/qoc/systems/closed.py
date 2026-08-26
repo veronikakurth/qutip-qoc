@@ -29,6 +29,9 @@ class ClosedSystem(System):
         """
         super().__init__(H0, H_controls)
         self._motion_controls = [self._GENERATOR_PREFACTOR * Hk for Hk in H_controls]
+    
+    def __repr__(self):
+        return f"ClosedSystem(drift='{self._H0}'\n, controls='{self.controls}"
 
     # System representation
     state_type: ClassVar[StateType] = "ket"

@@ -10,26 +10,21 @@ class PerformanceMeasure(ABC):
     Defines *what* the optimizer minimizes for a given objective.
 
     The primitive is the **loss**, not a fidelity. A measure owns both the loss
-    and its gradient, so the two cannot drift apart (see
-    ``docs/adr/0002-performance-measure-owns-the-loss.md``).
+    and its gradient.
 
-    Contract
+    API
     --------
     ``loss(current, target)``
         A real scalar that is **minimized**, ``0.0`` at a perfect match and
-        larger the worse ``current`` is. Nothing else is assumed: it need not
-        be bounded above, and it need not be ``1 - fidelity``. A distance is a
-        perfectly good loss.
+        larger the further ``current`` is from the ``target``. 
 
     ``loss_gradient(current, target)``
         d(loss)/d(current), returned in the *same encoding* as ``current`` (a
         ket for closed systems, a vectorized density matrix for open ones, an
-        operator for gate synthesis). Formally the Qobj ``G`` for which
-        ``d(loss) = Re<G, d(current)>`` under the Hilbert-Schmidt inner
-        product. Optional: gradient-free algorithms never call it.
+        operator for gate synthesis). 
 
     ``fidelity(current, target)``
-        Reporting only, never optimized against. Defaults to ``1 - loss``,
+        Used for reporting only, is not optimized against. Defaults to ``1 - loss``,
         which is right whenever the loss is an infidelity; override it when it
         is not.
     """
@@ -52,20 +47,17 @@ class PerformanceMeasure(ABC):
 
 
 # TODO: think of the way not to use the class by users and operate on functions instead
+# TODO: there is no way to provide gradient yet; this is crucial to make it work for gradient-based algs
 class FunctionalPerformanceMeasure(PerformanceMeasure):
     """
     Wraps a user-supplied callable as a PerformanceMeasure.
 
-    The escape hatch for custom scoring without subclassing. Two flavours,
-    because the sign convention has to be explicit — leaving it to the
-    subclass is what produced the bug recorded in ADR 0002:
+    Presents a way to implement a custom scoring without subclassing.
 
     * ``FunctionalPerformanceMeasure(func)`` — ``func`` is a **figure of
-      merit**: 1 = perfect, higher is better. The loss is ``1 - func(...)``.
+      merit**: 1 = perfect (higher is better). The loss is ``1 - func(...)``.
     * ``FunctionalPerformanceMeasure.from_loss(func)`` — ``func`` **is** the
-      loss: 0 = perfect, lower is better. Use this for distances.
-
-    Neither supplies a gradient, so both are for gradient-free algorithms only.
+      loss: 0 = perfect, lower is better.
     """
 
     def __init__(self, func, *, _is_loss: bool = False):

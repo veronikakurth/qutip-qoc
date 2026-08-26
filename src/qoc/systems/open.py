@@ -56,7 +56,14 @@ class OpenSystem(System):
         # Map user-passed arguments to an internal super-operator representation for drift and controls
         self._L0 = liouvillian(H0, c_ops)
         self._L_controls = [liouvillian(H_k) for H_k in H_controls]
+    
+    # TODO: what do we want the user to see here: raw user input or drift and controls converted to Liouvillians?
+    # def __repr__(self):
+    #     return f"OpenSystem(drift='{self._L0}',\n controls='{self._L_controls}',\n c_ops='{self.c_ops}')"
 
+    def __repr__(self):
+        return f"OpenSystem(drift='{self.drift}',\n controls='{self.controls}',\n c_ops='{self.c_ops}')"
+    
     @classmethod
     def from_liouvillian(
         cls,
