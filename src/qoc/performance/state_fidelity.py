@@ -75,10 +75,6 @@ class OpenStateFidelity(StateFidelity):
     """Fidelity between vectorized density matrices (open systems):
 
         F = Re tr(rho_t^dag rho) / tr(rho_t**2)
-
-    Normalizing by ``tr(rho_t**2)`` makes ``F == 1`` exactly at
-    ``rho == rho_t`` for any target, pure or mixed. Without it ``1 - F`` is not
-    an infidelity .
     """
 
     _expected_type = "operator-ket"
