@@ -101,16 +101,16 @@ class OpenSystem(System):
         encoded = operator_to_vector(state) # shape (n**2, 1)
         return encoded
 
-    def decode_state(self, arr: np.ndarray) -> Qobj:
+    def decode_state(self, state: Qobj) -> Qobj:
         space = self._L0.dims[0][0]
         op_dims = [space, space] # dims of density operator / channel I/O
         target_dims = [op_dims, [1]]
-        return vector_to_operator(Qobj(arr, dims=target_dims))
+        return vector_to_operator(Qobj(state, dims=target_dims))
     
-    def decode_operator(self, arr: np.ndarray) -> Qobj:
+    def decode_operator(self, state: Qobj) -> Qobj:
         space = self._L0.dims[0][0]
         op_dims = [space, space]
-        return Qobj(arr, dims=[op_dims, op_dims], superrep="super")
+        return Qobj(state, dims=[op_dims, op_dims], superrep="super")
     
     def control_generators(self):
         return self._L_controls
