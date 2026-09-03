@@ -3,6 +3,8 @@ from qutip import Qobj, QobjEvo, liouvillian, operator_to_vector, vector_to_oper
 
 from .base import System, StateType, ClassVar
 
+from qoc.utils.display import describe_qobj_list
+
 from qutip.typing import QobjEvoLike
 
 
@@ -57,13 +59,17 @@ class OpenSystem(System):
         self._L0 = liouvillian(H0, c_ops)
         self._L_controls = [liouvillian(H_k) for H_k in H_controls]
     
-    # TODO: what do we want the user to see here: raw user input or drift and controls converted to Liouvillians?
-    # def __repr__(self):
-    #     return f"OpenSystem(drift='{self._L0}',\n controls='{self._L_controls}',\n c_ops='{self.c_ops}')"
+    def _summary_rows(self) -> list[tuple[str, str]]:
+        # The summary reports what the user passed in (H_controls, c_ops); the
+        # internal Liouvillians are reachable via ``system.drift`` and
+        # ``system.control_generators()``.
+        if self._H0 is None:  # built by from_liouvillian: no separate c_ops
+            c_ops = "absorbed into L0"
+        else:
+            c_ops = describe_qobj_list(self._c_ops)
+        return super()._summary_rows() + [("c_ops", c_ops)]
 
-    def __repr__(self):
-        return f"OpenSystem(drift='{self.drift}',\n controls='{self.controls}',\n c_ops='{self.c_ops}')"
-    
+
     @classmethod
     def from_liouvillian(
         cls,
@@ -102,10 +108,9 @@ class OpenSystem(System):
         return encoded
 
     def decode_state(self, state: Qobj) -> Qobj:
-        space = self._L0.dims[0][0]
-        op_dims = [space, space] # dims of density operator / channel I/O
-        target_dims = [op_dims, [1]]
-        return vector_to_operator(Qobj(state, dims=target_dims))
+        if state.type != "operator-ket":
+            raise TypeError("decode_state expects an operator-ket")
+        return vector_to_operator(state)
     
     def decode_operator(self, state: Qobj) -> Qobj:
         space = self._L0.dims[0][0]

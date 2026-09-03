@@ -4,6 +4,8 @@ from typing import ClassVar, Literal
 import numpy as np
 from qutip import Qobj
 
+from qoc.utils.display import describe_qobj, describe_qobj_list, format_summary
+
 StateType = Literal["ket", "dm"]
 
 class System(ABC):
@@ -96,6 +98,26 @@ class System(ABC):
         list
             ``[H0, [H_1, u_1], [H_2, u_2], ...]``
         """
+
+    # Display
+
+    def _summary_rows(self) -> list[tuple[str, str]]:
+        """Label/value pairs describing this system, in display order.
+
+        Subclasses extend this rather than overriding ``__repr__``.
+        """
+        return [
+            ("state type", self.state_type),
+            ("dims", str(self.dims)),
+            ("drift", describe_qobj(self.drift)),
+            ("controls", describe_qobj_list(self.controls)),
+        ]
+
+    def __repr__(self) -> str:
+        return format_summary(
+            type(self).__name__,
+            self._summary_rows(),
+        )
 
     def _validate_hamiltonians(self, H0: Qobj, H_controls: list) -> None:
         if not isinstance(H0, Qobj) or not H0.isoper:
