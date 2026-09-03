@@ -97,10 +97,10 @@ class OpenStateFidelity(StateFidelity):
     _expected_type = "operator-ket"
  
     def fidelity(self, current: Qobj, target: Qobj) -> float:
-        """Normalized Hilbert-Schmidt superoperator overlap"""
+        """Normalized real-valued Hilbert-Schmidt superoperator overlap"""
         self._check_encoding(current)
         overlap = target.dag() @ current
-        return float(np.real(overlap) / float(_target_norm(target)))
+        return float(np.real(overlap) / _target_norm_sq(target))
 
     # In GRAPE, used for the final costate
     # Note: in the case of open state transfer with Hilbert-Schmidt superoperator overlap as fidelity,
@@ -112,7 +112,7 @@ class OpenStateFidelity(StateFidelity):
         d(loss) = Re< -t/s, drho>.
         """
         self._check_encoding(current)
-        return -target / float(_target_norm(target))
+        return -target / _target_norm_sq(target)
 
     def fidelity_formula(self):
         """Gives Latex representation, but will be formatted as text when Latex rendering is not possible."""
@@ -148,9 +148,10 @@ def state_fidelity_for(state_type: StateType) -> StateFidelity:
         f"Unknown state_type {state_type!r}; expected 'ket' or 'dm'"
     )
 
-# todo: do we really want a square here?
-def _target_norm(target: Qobj) -> float:
-    norm_sq = float(target.norm()) #** 2
+def _target_norm_sq(target: Qobj) -> float:
+    """Tr(rho_t^dag rho_t) = ||rho_t||_HS**2, the normalization that puts F = 1 at rho = rho_t.
+    """
+    norm_sq = float(np.real(complex(target.dag() @ target)))
     if norm_sq == 0.0:
         raise ValueError("target state has zero norm; fidelity is undefined")
     return norm_sq
