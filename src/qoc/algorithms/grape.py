@@ -6,15 +6,14 @@ from dataclasses import dataclass, field, fields
 
 from qoc.algorithms.base import Algorithm
 from qoc.algorithms.result import Result
-from qoc.objectives.state_transfer import StateTransfer
 from qoc.optimizers.base import Optimizer, ScipyLBFGS
 from qoc.problem import OptimalControlProblem
 from qoc.pulse.base import PulseParameterization
 from qoc.pulse.parameterizations import PiecewiseConstant
 from qoc.systems.base import System
-from qoc.systems.controlled_system import ControlledSystem
 
-# TODO: the output is a bit of a monster right now. Firstly, it's inefficient to hold all the Qobjs in memory (replace list with generator?), secondly, a tuple of lists is a bit too much - can we simplify it a bit?
+# TODO: the output is a bit of a monster right now. 
+# Firstly, it's inefficient to hold all the Qobjs in memory (replace list with generator?), secondly, a tuple of lists is a bit too much - can we simplify it a bit?
 def _step_propagators(system: System, u: np.ndarray, dt: float) -> tuple[list[Qobj], list[list[Qobj]]]:
     """Calculate per-step unitaries U_j = expm(prefactor * H_j * dt).
        Prefactor term depends on the system type and is already included in ``System.motion_generator_time_j``'s
@@ -114,7 +113,7 @@ class GRAPE(Algorithm):
             forward_evolution = self._forward_pass(Us, initial)
             final = forward_evolution[-1]
             loss = objective.loss(final, target)
-            # Seed the backward pass with d(loss)/d(final state)
+            # For backward pass, start with the derivative of the objective w.r.t. the final propagated object (~ terminal costate)
             co_states = self._backward_pass(
                 Us, objective.loss_gradient(final, target)
             )
@@ -156,7 +155,6 @@ class GRAPE(Algorithm):
         dt = self.parameterization.dt
         initial_encoded = system.encode_state(problem.objective.initial)
         final_state = self._forward_pass(_step_propagators(system, optimized_pulses, dt)[0], initial_encoded)[-1]
-
         decode_fun = (
             system.decode_state if final_state.shape[1] == 1
             else system.decode_operator
@@ -195,6 +193,8 @@ class GRAPE(Algorithm):
             co_states[j] = propagators[j].dag() @ co_states[j + 1]
         return co_states
     
+    # TODO: make sure dUs[j][k] is partial derivative of propagator w.r.t. control u[k, j] -> dUs[j][k]=dU_j / du_{k, j}
+    # TODO: important: not generator derivative - propagator derivative!
     def _gradient(self, forward_evolution: list[Qobj], co_states: list[Qobj], dUs: list[list[Qobj]], N: int) -> np.ndarray:
         """Adjoint-method gradient of the loss. Requires forward + backward passes.
 
@@ -212,27 +212,10 @@ class GRAPE(Algorithm):
         K = len(dUs[0])
         grads = np.zeros((K, N), dtype=float)
         for j in range(N):
-            forward_state = forward_evolution[j]
-            co_state = co_states[j + 1]
+            forward_state = forward_evolution[j] # Forward object before slice j
+            co_state = co_states[j + 1] # Backward object after slice j
             for k in range(K):
+                # Slice gradient assembly
                 overlap = co_state.dag() @ dUs[j][k] @ forward_state
                 grads[k, j] = _real_trace(overlap)
         return grads
-
-
-def define_problem():
-    H0 = 0 * sigmaz()
-    H_c = [sigmax() / 2, sigmax() / 2]
-    system = ControlledSystem.closed(H0=H0, H_controls=H_c)
-
-    T = 10
-    N = 10
-    times = np.linspace(0, T, N)
-    K = system.n_controls
-
-    param = PiecewiseConstant(K, times=times)
-
-    initial_state = basis(2, 0)
-    target_state = basis(2, 1)
-    objective = StateTransfer(initial_state, target_state)
-    return param, OptimalControlProblem(system, objective)
