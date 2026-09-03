@@ -1,7 +1,11 @@
 from qutip import Qobj
 
 from qoc.performance.base import PerformanceMeasure
+from qoc.utils.display import describe_qobj, format_summary
 
+# TODO: we might need a top-level split of control problem types (this also may make Problem class hierarchy a bit more specific):
+# 1. Targeted control: the problem is defined by reaching or approximating a specified object -> requires an explicit target
+# 2. Objective-drivel control: the problem is defined by optimising a functional, not matching one fixed object -> doesn't require an explicit target. We will design the interface for them later.
 
 class Objective:
     """
@@ -34,9 +38,22 @@ class Objective:
         self.target = target
         self.performance_measure = performance_measure
 
-    def __repr__(self):
-        return f"{self.__class__.__repr__}(initial='{self.initial}, \n target='{self.target}'"
-    
+    def _summary_rows(self) -> list[tuple[str, str]]:
+        """Label/value pairs describing this objective, in display order.
+
+        StateTransfer and GateSynthesis add no fields of their own, so this
+        one implementation serves every objective.
+        """
+        return [
+            ("initial", describe_qobj(self.initial)),
+            ("target", describe_qobj(self.target)),
+            ("measure", type(self.performance_measure).__name__),
+        ]
+
+    def __repr__(self) -> str:
+        return format_summary(type(self).__name__, self._summary_rows())
+
+
     def loss(self, current: Qobj, target: Qobj = None) -> float:
         """Scalar the optimizer minimizes; 0.0 at a perfect match."""
         return self.performance_measure.loss(current, self._target_or_own(target))
@@ -48,15 +65,15 @@ class Objective:
         )
 
     def fidelity(self, current: Qobj, target: Qobj = None) -> float:
-        """Figure of merit for reporting; 1 = perfect match."""
+        """Figure of merit; 1 = perfect match."""
         return self.performance_measure.fidelity(current, self._target_or_own(target))
 
     #: Retained so existing scripts keep working; `fidelity` is the name to use.
     compute = fidelity
 
     def _target_or_own(self, target: Qobj | None) -> Qobj:
-        # `is None`, not truthiness: bool(Qobj) is always True, so `if target:`
-        # only happened to behave correctly.
+        # If no target is passed,
+        # return target saved upon initialision of Objective
         return self.target if target is None else target
 
     def check_compatible(self, system) -> None:

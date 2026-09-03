@@ -13,14 +13,14 @@ class StateTransfer(Objective):
     Both initial and target must be kets (pure states) or density matrices (mixed states)
     with matching dimensions.
     If a performance measure is not selected, the state-fidelity variant
-    matching the states is chosen: ClosedStateFidelity for kets,
+    matching the state representation is chosen: ClosedStateFidelity for kets,
     OpenStateFidelity for density matrices.
     """
 
     def __init__(
         self,
         initial: Qobj,
-        target: Qobj,
+        target: Qobj, # TODO: a target may become optional -> for certain objectives, it might not be necessary to provide explicit one. Update this contract in base class
         performance_measure: None | PerformanceMeasure = None,
     ):
         validate_states(initial, target)
