@@ -35,7 +35,8 @@ def test_state_transfer_single_qubit_open_system(x_open_system):
     # By default, state fidelity is used as a performance measure in a state transfer task
     objective = StateTransfer(initial_state, target_state)
     control_problem = OptimalControlProblem(system, objective)
-    algorithm = GRAPE(parameterization=param)
+    bounds = [(-1.0, 1.0) for _ in range(K * N)]
+    algorithm = GRAPE(parameterization=param, optimizer_params={"bounds": bounds, "max_iter": 500})
     result = algorithm.solve(control_problem, initial_pulse)
     assert result.fidelity > 1.0 - 1e-4
 
