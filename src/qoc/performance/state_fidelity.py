@@ -1,4 +1,5 @@
-"""State fidelity, one class per state encoding.
+"""
+State fidelity, one class per state encoding.
 
 The closed and open forms are different functionals:
 quadratic in the ket, linear in the density matrix.
@@ -16,7 +17,23 @@ from qoc.systems.base import StateType
 
 from .base import PerformanceMeasure
 
+from dataclasses import dataclass
 
+@dataclass
+class Formula:
+    text: str
+    latex: str
+
+    def __str__(self) -> str:
+        return self.text
+
+    def __repr__(self) -> str:
+        return self.text
+
+    def _repr_latex_(self) -> str:
+        return f"$$ {self.latex} $$"
+
+# For state transfer: Basically, we now have one class per formula per state representation
 class StateFidelity(PerformanceMeasure):
     """Base for state-fidelity measures: ``loss = 1 - fidelity``.
 
@@ -78,18 +95,47 @@ class OpenStateFidelity(StateFidelity):
     """
 
     _expected_type = "operator-ket"
-
+ 
     def fidelity(self, current: Qobj, target: Qobj) -> float:
+        """Normalized Hilbert-Schmidt superoperator overlap"""
         self._check_encoding(current)
-        overlap = complex(target.dag() @ current)
-        return float(np.real(overlap) / _target_norm_sq(target))
+        overlap = target.dag() @ current
+        return float(np.real(overlap) / float(_target_norm(target)))
 
+    # In GRAPE, used for the final costate
+    # Note: in the case of open state transfer with Hilbert-Schmidt superoperator overlap as fidelity,
+    # ``current`` is not used for the gradient of loss. 
+    # But we have to keep to one signature for ``PerformanceMeasure.loss_gradient`` since the exact formula
+    # may vary depending on ``PerformanceMeasure.fidelity``
     def loss_gradient(self, current: Qobj, target: Qobj) -> Qobj:
         """loss = 1 - Re<<t|rho>> / s is linear in rho, so
         d(loss) = Re< -t/s, drho>.
         """
         self._check_encoding(current)
-        return -target / _target_norm_sq(target)
+        return -target / float(_target_norm(target))
+
+    def fidelity_formula(self):
+        """Gives Latex representation, but will be formatted as text when Latex rendering is not possible."""
+        hs_overlap = Formula(
+        text=(
+            "F = Re⟨⟨ρ_tar | ρ⟩⟩ / ||ρ_tar||_HS²\n"
+            "  = Re Tr(ρ_tar† ρ) / Tr(ρ_tar† ρ_tar)"
+        ),
+        latex=(
+            r"F = \frac{"
+            r"\operatorname{Re}\langle\!\langle \rho_{\mathrm{tar}} \mid \rho \rangle\!\rangle"
+            r"}{"
+            r"\lVert \rho_{\mathrm{tar}} \rVert_{\mathrm{HS}}^2"
+            r"}"
+            r"="
+            r"\frac{"
+            r"\operatorname{Re}\,\mathrm{Tr}(\rho_{\mathrm{tar}}^\dagger \rho)"
+            r"}{"
+            r"\mathrm{Tr}(\rho_{\mathrm{tar}}^\dagger \rho_{\mathrm{tar}})"
+            r"}"
+            )
+        )
+        return hs_overlap
 
 
 def state_fidelity_for(state_type: StateType) -> StateFidelity:
@@ -102,9 +148,9 @@ def state_fidelity_for(state_type: StateType) -> StateFidelity:
         f"Unknown state_type {state_type!r}; expected 'ket' or 'dm'"
     )
 
-def _target_norm_sq(target: Qobj) -> float:
-    """tr(rho_t**2); the scale that makes F(rho_t) == 1."""
-    norm_sq = float(target.norm()) ** 2
+# todo: do we really want a square here?
+def _target_norm(target: Qobj) -> float:
+    norm_sq = float(target.norm()) #** 2
     if norm_sq == 0.0:
         raise ValueError("target state has zero norm; fidelity is undefined")
     return norm_sq
