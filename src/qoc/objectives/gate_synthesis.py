@@ -13,6 +13,8 @@ class GateSynthesis(Objective):
     with matching dimensions.
     """
 
+    propagates = "operator"
+
     def __init__(
         self,
         initial: Qobj,

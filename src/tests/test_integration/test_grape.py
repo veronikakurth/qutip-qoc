@@ -52,10 +52,7 @@ def test_state_transfer_single_qubit_open_system(x_open_system):
     # Control cuts the uncontrolled infidelity by at least an order of magnitude
     assert 1 - result.fidelity < 0.1 * (1 - uncontrolled_fidelity)
     # The reported fidelity is the objective's fidelity of the reported final state
-    reported = objective.fidelity(
-        system.encode_state(result.final_state), system.encode_state(target_state)
-    )
-    assert np.isclose(result.fidelity, reported)
+    assert np.isclose(result.fidelity, objective.fidelity(result.final_state))
 
 #TODO: group by system types and tasks
 @pytest.fixture

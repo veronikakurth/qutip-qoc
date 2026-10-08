@@ -17,6 +17,8 @@ class StateTransfer(Objective):
     OpenStateFidelity for density matrices.
     """
 
+    propagates = "state"
+
     def __init__(
         self,
         initial: Qobj,

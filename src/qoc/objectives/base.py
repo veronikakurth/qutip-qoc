@@ -1,3 +1,5 @@
+from typing import ClassVar, Literal
+
 from qutip import Qobj
 
 from qoc.performance.base import PerformanceMeasure
@@ -21,7 +23,15 @@ class Objective:
 
     Subclasses (StateTransfer, GateSynthesis) add domain-specific validation
     of initial and target in their constructors.
+
+    All methods take and return *physical* objects (kets, density matrices,
+    operators), never a system's encoded representation (ADR 0004).
     """
+
+    #: What an algorithm propagates for this objective: a ``"state"`` or an
+    #: ``"operator"``. Selects the ``System`` encode/decode pair (ADR 0004);
+    #: the Qobj type cannot, since a density matrix and a unitary are both "oper".
+    propagates: ClassVar[Literal["state", "operator"]]
 
     def __init__(
         self,
@@ -59,7 +69,7 @@ class Objective:
         return self.performance_measure.loss(current, self._target_or_own(target))
 
     def loss_gradient(self, current: Qobj, target: Qobj = None) -> Qobj:
-        """d(loss)/d(current), in the same encoding as ``current``."""
+        """d(loss)/d(current), in the same physical representation as ``current``."""
         return self.performance_measure.loss_gradient(
             current, self._target_or_own(target)
         )

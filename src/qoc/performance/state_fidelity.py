@@ -1,11 +1,12 @@
 """
-State fidelity, one class per state encoding.
+State fidelity, one class per state kind.
 
-The closed and open forms are different functionals:
+The ket and density-matrix forms are different functionals:
 quadratic in the ket, linear in the density matrix.
 
-Which one applies is decided by the *encoding*, which is ``System``'s knowledge.
-So the choice is made once, when the objective is built and the state type is known.
+Which one applies is decided by the kind of state (ket or density matrix), once,
+when the objective is built (ADR 0003). Both take *physical* states; the
+algorithm owns any encoding, such as vectorizing density matrices (ADR 0004).
 """
 
 from abc import abstractmethod
@@ -41,8 +42,10 @@ class StateFidelity(PerformanceMeasure):
     ``StateTransfer`` pick the variant matching its states.
     """
 
-    #: Encoding this measure's inputs must arrive in, as a Qobj ``type``.
+    #: Physical state kind this measure accepts, as a Qobj ``type``.
     _expected_type: str
+    #: The same kind, in words, for error messages.
+    _state_name: str
 
     def loss(self, current: Qobj, target: Qobj) -> float:
         return 1.0 - self.fidelity(current, target)
@@ -55,14 +58,14 @@ class StateFidelity(PerformanceMeasure):
     def loss_gradient(self, current: Qobj, target: Qobj) -> Qobj:
         """d(loss)/d(current)."""
 
-    def _check_encoding(self, current: Qobj) -> None:
-        """Validate if a measure is paired with the correct kind of system."""
+    def _check_state_kind(self, current: Qobj) -> None:
+        """Validate that the measure is paired with the kind of state it is defined on."""
         if current.type != self._expected_type:
             raise TypeError(
-                f"{type(self).__name__} expects states encoded as "
-                f"{self._expected_type!r}, got {current.type!r}. This usually "
-                f"means the objective's performance measure does not match "
-                f"the system it was paired with."
+                f"{type(self).__name__} expects a {self._state_name} "
+                f"(Qobj type {self._expected_type!r}), got type {current.type!r}. "
+                f"This usually means the objective's "
+                f"performance measure does not match its kind of state."
             )
 
 
@@ -73,45 +76,47 @@ class ClosedStateFidelity(StateFidelity):
     """
 
     _expected_type = "ket"
+    _state_name = "ket"
     
     # TODO: decide how to enable phase-sensitive fidelity
     def fidelity(self, current: Qobj, target: Qobj) -> float:
-        self._check_encoding(current)
+        self._check_state_kind(current)
         return float(np.abs(complex(target.dag() @ current)) ** 2)
 
     def loss_gradient(self, current: Qobj, target: Qobj) -> Qobj:
         """loss = 1 - |c|**2 with c = <t|psi>, so
         d(loss) = -2 Re(conj(c) <t|dpsi>) = Re< -2 c t, dpsi>.
         """
-        self._check_encoding(current)
+        self._check_state_kind(current)
         c = complex(target.dag() @ current)
         return -2.0 * c * target
 
 
 class OpenStateFidelity(StateFidelity):
-    """Fidelity between vectorized density matrices (open systems):
+    """Fidelity between density matrices (open systems):
 
-        F = Re tr(rho_t^dag rho) / tr(rho_t**2)
+        F = Re tr(rho_t^dag rho) / tr(rho_t^dag rho_t)
     """
 
-    _expected_type = "operator-ket"
+    _expected_type = "oper"
+    _state_name = "density matrix"
  
     def fidelity(self, current: Qobj, target: Qobj) -> float:
-        """Normalized real-valued Hilbert-Schmidt superoperator overlap"""
-        self._check_encoding(current)
-        overlap = target.dag() @ current
+        """Normalized real-valued Hilbert-Schmidt overlap"""
+        self._check_state_kind(current)
+        overlap = (target.dag() @ current).tr()
         return float(np.real(overlap) / _target_norm_sq(target))
 
     # In GRAPE, used for the final costate
-    # Note: in the case of open state transfer with Hilbert-Schmidt superoperator overlap as fidelity,
+    # Note: in the case of open state transfer with Hilbert-Schmidt overlap as fidelity,
     # ``current`` is not used for the gradient of loss. 
     # But we have to keep to one signature for ``PerformanceMeasure.loss_gradient`` since the exact formula
     # may vary depending on ``PerformanceMeasure.fidelity``
     def loss_gradient(self, current: Qobj, target: Qobj) -> Qobj:
-        """loss = 1 - Re<<t|rho>> / s is linear in rho, so
-        d(loss) = Re< -t/s, drho>.
+        """loss = 1 - Re tr(rho_t^dag rho) / s is linear in rho, so
+        d(loss) = Re< -rho_t/s, drho>.
         """
-        self._check_encoding(current)
+        self._check_state_kind(current)
         return -target / _target_norm_sq(target)
 
     def fidelity_formula(self):
@@ -151,7 +156,7 @@ def state_fidelity_for(state_type: StateType) -> StateFidelity:
 def _target_norm_sq(target: Qobj) -> float:
     """Tr(rho_t^dag rho_t) = ||rho_t||_HS**2, the normalization that puts F = 1 at rho = rho_t.
     """
-    norm_sq = float(np.real(complex(target.dag() @ target)))
+    norm_sq = float(np.real((target.dag() @ target).tr()))
     if norm_sq == 0.0:
         raise ValueError("target state has zero norm; fidelity is undefined")
     return norm_sq

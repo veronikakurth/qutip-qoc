@@ -1,11 +1,12 @@
 import numpy as np
-from typing import Union
+from typing import Callable, Union
 from qutip import Qobj, basis, sigmax, sigmaz
 from scipy.linalg import expm, expm_frechet
 from dataclasses import dataclass, field, fields
 
 from qoc.algorithms.base import Algorithm
 from qoc.algorithms.result import Result
+from qoc.objectives.base import Objective
 from qoc.optimizers.base import Optimizer, ScipyLBFGS
 from qoc.problem import OptimalControlProblem
 from qoc.pulse.base import PulseParameterization
@@ -49,6 +50,23 @@ def _real_trace(overlap) -> float:
     return float(np.real(overlap.tr() if isinstance(overlap, Qobj) else overlap))
 
 
+def _encoding_for(system: System, objective: Objective) -> tuple[Callable[[Qobj], Qobj], Callable[[Qobj], Qobj]]:
+    """The ``(encode, decode)`` pair for what ``objective`` propagates (ADR 0004).
+
+    GRAPE propagates encoded objects, while the objective's measure sees only
+    physical ones. ``encode`` also maps the measure's physical gradient onto the
+    seed of the backward pass, which is exact by the encoding contract in ADR 0004.
+    """
+    if objective.propagates == "state":
+        return system.encode_state, system.decode_state
+    if objective.propagates == "operator":
+        return system.encode_operator, system.decode_operator
+    raise ValueError(
+        f"{type(objective).__name__}.propagates must be 'state' or 'operator', "
+        f"got {objective.propagates!r}"
+    )
+
+
 # TODO: relocate it onto optimizer later
 @dataclass
 class OptimizerParams:
@@ -67,7 +85,15 @@ class OptimizerParams:
 
 
 class GRAPE(Algorithm):
-    """Is compatible with state transfer objective"""
+    """Gradient Ascent Pulse Engineering with an adjoint (forward/backward) gradient.
+
+    Supports state transfer (closed and open systems) and gate synthesis (closed
+    systems). GRAPE propagates the system's *encoded* representation; the
+    objective's performance measure sees only *physical* objects. GRAPE decodes
+    the final object for the measure and encodes the measure's gradient to seed
+    the backward pass (ADR 0004), so any measure that implements
+    ``loss_gradient`` works unchanged.
+    """
 
     def __init__(
         self,
@@ -97,9 +123,9 @@ class GRAPE(Algorithm):
         system = problem.system
         objective = problem.objective
 
-        # Encode boundary conditions
-        initial = system.encode_state(objective.initial)
-        target = system.encode_state(objective.target)
+        # The algorithm owns the encoding; the objective and its measure see only physical objects
+        encode, decode = _encoding_for(system, objective)
+        initial = encode(objective.initial)
         # Extract algorithm-specific info from parameterization
         dt = self.parameterization.dt
         N = self.parameterization.n_timesteps
@@ -111,16 +137,17 @@ class GRAPE(Algorithm):
             Us, dUs = _step_propagators(system, u, dt) # -> list[Qobj]
             # Compute forward pass (starting with objective's initial state - pre-encoded)
             forward_evolution = self._forward_pass(Us, initial)
-            final = forward_evolution[-1]
-            loss = objective.loss(final, target)
-            # For backward pass, start with the derivative of the objective w.r.t. the final propagated object (~ terminal costate)
+            final = decode(forward_evolution[-1])
+            loss = objective.loss(final)
+            # For backward pass, start with the derivative of the loss w.r.t. the final propagated object (~ terminal costate).
+            # The measure returns it in physical form; encoding it gives the seed in the propagated representation.
             co_states = self._backward_pass(
-                Us, objective.loss_gradient(final, target)
+                Us, encode(objective.loss_gradient(final))
             )
             grads = self._gradient(forward_evolution, co_states, dUs, N)
             
             if fidelity_history is not None:
-                fidelity_history.append(objective.fidelity(final, target))
+                fidelity_history.append(objective.fidelity(final))
 
             return loss, grads.ravel()
 
@@ -182,20 +209,16 @@ class GRAPE(Algorithm):
 
         optimized_pulses = self.parameterization.to_amplitudes(opt_result.x)
         dt = self.parameterization.dt
-        initial_encoded = system.encode_state(problem.objective.initial)
-        target_encoded = system.encode_state(problem.objective.target)
-        final_state = self._forward_pass(_step_propagators(system, optimized_pulses, dt)[0], initial_encoded)[-1]
-        decode_fun = (
-            system.decode_state if final_state.shape[1] == 1
-            else system.decode_operator
-        )
+        encode, decode = _encoding_for(system, problem.objective)
+        propagators = _step_propagators(system, optimized_pulses, dt)[0]
+        final_state = decode(self._forward_pass(propagators, encode(problem.objective.initial))[-1])
         return Result(
             optimized_pulses=optimized_pulses,
-            fidelity=problem.objective.fidelity(final_state, target_encoded),
+            fidelity=problem.objective.fidelity(final_state),
             n_iters=opt_result.nit,
             optimizer_info=opt_result,
             history=fidelity_history,
-            final_state=decode_fun(final_state)
+            final_state=final_state
         )
     # TODO: optimisation: do we maybe want to pass a generator of propagators? In order not to load all the propagators into memory at once 
     # TODO: in Machnes et al paper, check for optimisation techniques on propagation

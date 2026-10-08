@@ -12,6 +12,12 @@ class PerformanceMeasure(ABC):
     The primitive is the **loss**, not a fidelity. A measure owns both the loss
     and its gradient.
 
+    A measure works on **physical objects only**: kets, density matrices, or
+    operators, exactly as the user wrote ``initial`` and ``target``. It never sees
+    a system's encoded representation (e.g. a vectorized density matrix); the
+    algorithm encodes and decodes around it (ADR 0004). A formula is therefore
+    written once, in physics notation, and works for any system encoding.
+
     API
     --------
     ``loss(current, target)``
@@ -19,9 +25,11 @@ class PerformanceMeasure(ABC):
         larger the further ``current`` is from the ``target``. 
 
     ``loss_gradient(current, target)``
-        d(loss)/d(current), returned in the *same encoding* as ``current`` (a
-        ket for closed systems, a vectorized density matrix for open ones, an
-        operator for gate synthesis). 
+        d(loss)/d(current): the ``G`` with ``d(loss) = Re<G, d(current)>`` under
+        the Hilbert-Schmidt inner product ``<A, B> = tr(A^dag B)``, returned in
+        the same *physical* representation as ``current`` (a ket, a density-matrix
+        shaped operator, or an operator for gate synthesis). It need not be
+        Hermitian or normalized.
 
     ``fidelity(current, target)``
         Used for reporting only, is not optimized against. Defaults to ``1 - loss``,
@@ -34,7 +42,7 @@ class PerformanceMeasure(ABC):
         """Scalar to minimize; 0.0 at a perfect match."""
 
     def loss_gradient(self, current: Qobj, target: Qobj) -> Qobj:
-        """d(loss)/d(current), in the same encoding as ``current``."""
+        """d(loss)/d(current), in the same physical representation as ``current``."""
         raise NotImplementedError(
             f"{type(self).__name__} does not implement loss_gradient, so it "
             f"cannot be used with a gradient-based algorithm such as GRAPE. "
