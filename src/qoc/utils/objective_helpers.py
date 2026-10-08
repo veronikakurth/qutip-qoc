@@ -7,6 +7,8 @@ def state_type(obj: Qobj, tol: float = 1e-8) -> str:
         raise TypeError(f"Expected a Qobj, got {type(obj)}.")
 
     if obj.isket:
+        if abs(obj.norm() - 1) > tol:
+            raise ValueError(f"Ket must be normalized, got norm {obj.norm():.6g}")
         return "ket"
 
     if obj.isoper and obj.isherm:
@@ -29,5 +31,5 @@ def validate_states(current: Qobj, target: Qobj) -> None:
         )
     if current.dims != target.dims:
         raise ValueError(
-            f"initial and target dims differ: {initial.dims} vs {target.dims}"
+            f"initial and target dims differ: {current.dims} vs {target.dims}"
         )
