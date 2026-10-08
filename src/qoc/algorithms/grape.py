@@ -79,7 +79,7 @@ class GRAPE(Algorithm):
         if not isinstance(parameterization, PiecewiseConstant):
             raise NotImplementedError(
                 f"GRAPE currently supports only parameterization of type PiecewiseConstant, "
-                f"got {type(param).__name__}"
+                f"got {type(parameterization).__name__}"
             )
         self.parameterization = parameterization
         self.optimizer = optimizer or ScipyLBFGS()
@@ -92,7 +92,7 @@ class GRAPE(Algorithm):
         for gradient checks (`scipy.optimize.check_grad`, `approx_fprime`), 
         plotting the loss landscape, or driving a custom optimizer loop. `solve` is just one caller.
 
-        If `fidelity_history` is passed, `1 - loss` is appended on every call.
+        If `fidelity_history` is passed, the objective's fidelity is appended on every call.
         """
         system = problem.system
         objective = problem.objective
@@ -120,7 +120,7 @@ class GRAPE(Algorithm):
             grads = self._gradient(forward_evolution, co_states, dUs, N)
             
             if fidelity_history is not None:
-                fidelity_history.append(1 - loss)
+                fidelity_history.append(objective.fidelity(final, target))
 
             return loss, grads.ravel()
 
@@ -133,15 +133,44 @@ class GRAPE(Algorithm):
         # Get initial values of parameter vector
         theta0 = self.parameterization.initial_theta(initial_param_values)
 
-        fidelity_history = []
-        loss_and_grad = self.build_loss_and_grad(problem, fidelity_history)
+        # The closure records every evaluation, line-search trials included;
+        # the history keeps one entry per accepted iterate, starting at theta0.
+        evaluated_fidelities = []
+        loss_and_grad = self.build_loss_and_grad(problem, evaluated_fidelities)
+        last_evaluated = {}
 
+        def tracked_loss_and_grad(theta):
+            result = loss_and_grad(theta)
+            last_evaluated["theta"] = np.array(theta, copy=True)
+            return result
+
+        fidelity_history = []
+
+        def record_iteration(theta):
+            # The accepted iterate is normally the last point evaluated; recompute otherwise
+            if not np.array_equal(theta, last_evaluated.get("theta")):
+                tracked_loss_and_grad(theta)
+            fidelity_history.append(evaluated_fidelities[-1])
+
+        # Bounds come from the parameterization (amplitude_range) or from optimizer_params, not both
+        optimizer_kwargs = dict(self.optimizer_params.extra)
+        param_bounds = self.parameterization.bounds()
+        if param_bounds is not None:
+            if optimizer_kwargs.get("bounds") is not None:
+                raise ValueError(
+                    "Bounds were given both by the parameterization (amplitude_range) "
+                    "and by optimizer_params['bounds']; pass only one."
+                )
+            optimizer_kwargs["bounds"] = param_bounds
+
+        record_iteration(theta0)
         opt_result = self.optimizer.minimize(
-            loss_and_grad,
+            tracked_loss_and_grad,
             x0=theta0,
             max_iter=self.optimizer_params.max_iter,
             tol=self.optimizer_params.tol,
-            **self.optimizer_params.extra
+            callback=record_iteration,
+            **optimizer_kwargs
         )
 
 
@@ -154,6 +183,7 @@ class GRAPE(Algorithm):
         optimized_pulses = self.parameterization.to_amplitudes(opt_result.x)
         dt = self.parameterization.dt
         initial_encoded = system.encode_state(problem.objective.initial)
+        target_encoded = system.encode_state(problem.objective.target)
         final_state = self._forward_pass(_step_propagators(system, optimized_pulses, dt)[0], initial_encoded)[-1]
         decode_fun = (
             system.decode_state if final_state.shape[1] == 1
@@ -161,7 +191,7 @@ class GRAPE(Algorithm):
         )
         return Result(
             optimized_pulses=optimized_pulses,
-            fidelity=1 - opt_result.fun,
+            fidelity=problem.objective.fidelity(final_state, target_encoded),
             n_iters=opt_result.nit,
             optimizer_info=opt_result,
             history=fidelity_history,
