@@ -18,8 +18,9 @@ def x_system():
 
 
 def compute_single(system, u, dt):
-    """Single slice, single control."""
-    return _step_propagators(system, np.array([[u]]), dt)[0]
+    """Single slice, single control: the propagator as a numpy array."""
+    propagators, _ = _step_propagators(system, np.array([[u]]), dt)
+    return propagators[0].full()
 
 
 class TestStepPropagators:
@@ -48,9 +49,8 @@ class TestStepPropagators:
         # U(u, 2dt) = U(u, dt)²
         dt = 0.3
         u = 0.7
-        amps = np.array([[u]])
 
-        single = _step_propagators(x_system, amps, dt)[0]
-        double = _step_propagators(x_system, amps, 2 * dt)[0]
+        single = compute_single(x_system, u, dt)
+        double = compute_single(x_system, u, 2 * dt)
 
         assert np.allclose(double, single @ single, atol=1e-14)
