@@ -25,21 +25,26 @@ class System(ABC):
 
     @abstractmethod
     def encode_state(self, state: Qobj) -> Qobj:
-        """Depending on the system type,
-           it is either a column-vector representation or identity. Inverse of decode_state""" 
+        """Map a physical state into the column vector the propagators act on.
+
+        Identity for a closed system (kets), ``operator_to_vector`` for an open
+        one (density matrices).
+        """
 
     @abstractmethod
-    def decode_state(self, arr: np.ndarray) -> Qobj:
-        """Reconstruct the physical Qobj from encode_state's output """
-
-    # decode_state(encode_state(x)) ~= x
+    def decode_state(self, state: Qobj) -> Qobj:
+        """Inverse of ``encode_state``: recover the physical state."""
 
     def encode_operator(self, op: Qobj) -> Qobj:
+        """Map a physical operator into the representation the propagators act on.
+
+        Identity by default.
+        """
         return op
 
     @abstractmethod
-    def decode_operator(self, arr: np.ndarray) -> Qobj:
-        """Dual method to encode_operator, implementation is system-specific"""
+    def decode_operator(self, operator: Qobj) -> Qobj:
+        """Inverse of ``encode_operator``: recover the physical operator."""
 
     @abstractmethod
     def control_generators(self) -> list[Qobj]:
