@@ -46,38 +46,40 @@ class TestBuildHamiltonian:
         assert len(coeff) == len(times)
 
 
-class TestBuildHamiltonianTimeJ:
+class TestMotionGeneratorTimeJ:
+    """The motion generator carries the Schroedinger prefactor: G_j = -i H_j."""
 
     def test_zero_controls_returns_drift(self, system, zero_pulse):
-        H_j = system.build_generator_time_j(zero_pulse, j=0)
-        assert H_j == system.drift
+        G_j = system.motion_generator_time_j(zero_pulse, j=0)
+        assert G_j == -1j * system.drift
 
     def test_returns_qobj(self, system, pi_pulse):
-        H_j = system.build_generator_time_j(pi_pulse, j=0)
-        assert isinstance(H_j, Qobj)
+        G_j = system.motion_generator_time_j(pi_pulse, j=0)
+        assert isinstance(G_j, Qobj)
 
     def test_control_contribution(self, system, times):
         u = np.array([[2.0] * len(times)])
-        H_j = system.build_generator_time_j(u, j=0)
-        expected = system.drift + 2.0 * system.controls[0]
-        assert H_j == expected
+        G_j = system.motion_generator_time_j(u, j=0)
+        expected = -1j * (system.drift + 2.0 * system.controls[0])
+        assert G_j == expected
 
 
 class TestStepPropagators:
 
     def test_returns_n_propagators(self, system, times, pi_pulse):
-        Us = _step_propagators(system, pi_pulse, dt=times[1] - times[0])
+        Us, _ = _step_propagators(system, pi_pulse, dt=times[1] - times[0])
         assert len(Us) == len(times)
 
     def test_each_propagator_is_unitary(self, system, times, pi_pulse):
-        Us = _step_propagators(system, pi_pulse, dt=times[1] - times[0])
+        Us, _ = _step_propagators(system, pi_pulse, dt=times[1] - times[0])
         for j, U in enumerate(Us):
+            U = U.full()
             residual = np.linalg.norm(U @ U.conj().T - np.eye(2))
             assert residual < 1e-12, f"Propagator {j} is not unitary"
 
     def test_zero_pulse_gives_drift_only(self, system, times, zero_pulse):
         dt = times[1] - times[0]
-        Us = _step_propagators(system, zero_pulse, dt=dt)
+        Us, _ = _step_propagators(system, zero_pulse, dt=dt)
         expected = expm(-1j * system.drift.full() * dt)
         for j, U in enumerate(Us):
-            assert np.allclose(U, expected, atol=1e-12), f"Propagator {j} differs from drift-only"
+            assert np.allclose(U.full(), expected, atol=1e-12), f"Propagator {j} differs from drift-only"
