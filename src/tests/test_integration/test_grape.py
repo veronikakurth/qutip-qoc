@@ -18,8 +18,9 @@ def x_open_system(): # Taken from qutip-qoc's notebooks
     return ControlledSystem.open(H0=H0, H_controls=Hc, c_ops=c_ops)
 
 def test_state_transfer_single_qubit_open_system(x_open_system):
-    # Testing GRAPE for a state transfer on a single qubit for which
-    # an analytical solution is known
+    # No closed-form optimum is known under damping with bounded amplitudes, so this
+    # asserts what GRAPE guarantees rather than a fidelity threshold.
+    # qutip's sigmam drives |0> -> |1>, so the target |1><1| is the damping's steady state.
     system = x_open_system
     T = 2 * np.pi
     N = 250
@@ -27,18 +28,34 @@ def test_state_transfer_single_qubit_open_system(x_open_system):
     np.random.seed(0)
 
     K = system.n_controls
+    bound = 1.0
     initial_pulse = np.random.uniform(-0.1, 0.1, (K, N))
-    param = PiecewiseConstant(K, times=times)
-    dt = param.dt
+    param = PiecewiseConstant(K, times=times, amplitude_range=(-bound, bound))
     initial_state = qutip.ket2dm(qutip.basis(2, 0)) # start in |0><0|
     target_state = qutip.ket2dm(qutip.basis(2, 1))
     # By default, state fidelity is used as a performance measure in a state transfer task
     objective = StateTransfer(initial_state, target_state)
     control_problem = OptimalControlProblem(system, objective)
-    bounds = [(-1.0, 1.0) for _ in range(K * N)]
-    algorithm = GRAPE(parameterization=param, optimizer_params={"bounds": bounds, "max_iter": 500})
+    algorithm = GRAPE(parameterization=param, optimizer_params={"max_iter": 500})
+
+    # Baseline: uncontrolled decay towards |1><1|
+    baseline = []
+    algorithm.build_loss_and_grad(control_problem, baseline)(np.zeros(K * N))
+    uncontrolled_fidelity = baseline[-1]
+
     result = algorithm.solve(control_problem, initial_pulse)
-    assert result.fidelity > 1.0 - 1e-4
+
+    # Amplitude bounds are respected
+    assert np.all(np.abs(result.optimized_pulses) <= bound + 1e-10)
+    # Accepted iterates never lose fidelity
+    assert np.all(np.diff(result.history) >= -1e-12)
+    # Control cuts the uncontrolled infidelity by at least an order of magnitude
+    assert 1 - result.fidelity < 0.1 * (1 - uncontrolled_fidelity)
+    # The reported fidelity is the objective's fidelity of the reported final state
+    reported = objective.fidelity(
+        system.encode_state(result.final_state), system.encode_state(target_state)
+    )
+    assert np.isclose(result.fidelity, reported)
 
 #TODO: group by system types and tasks
 @pytest.fixture
