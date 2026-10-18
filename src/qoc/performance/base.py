@@ -48,7 +48,9 @@ class PerformanceMeasure(ABC):
     ``accepts``
         The kinds of physical object the measure is defined on, as a frozenset
         of ``"ket"``, ``"dm"``, ``"unitary"``; ``None`` if undeclared. A measure
-        that declares it rejects any other kind via ``_check_kind``.
+        that declares it is checked against the objective's semantic domain
+        at construction via ``check_domain``. ``_check_kind`` additionally
+        checks Qobj representation at evaluation time.
     """
 
     accepts: frozenset[Kind] | None = None
@@ -68,6 +70,21 @@ class PerformanceMeasure(ABC):
     def fidelity(self, current: Qobj, target: Qobj) -> float:
         """Figure of merit for reporting: 1 = perfect match."""
         return 1.0 - self.loss(current, target)
+
+    def check_domain(self, kind: Kind) -> None:
+        """Check the objective's semantic domain without evaluating the measure.
+
+        Objectives supply their validated domain: ket, density matrix or
+        unitary. Undeclared domains (accepts=None) permit custom measures.
+        """
+        if self.accepts is None:
+            return
+        if kind not in self.accepts:
+            supported = ", ".join(sorted(self.accepts))
+            raise TypeError(
+                f"{type(self).__name__} accepts [{supported}], "
+                f"but the objective uses {kind!r}."
+            )
 
     def _check_kind(self, current: Qobj) -> None:
         """Validate that ``current`` is a kind this measure accepts; no-op if undeclared.

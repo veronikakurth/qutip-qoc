@@ -11,6 +11,8 @@ class GateSynthesis(Objective):
 
     Both initial (typically identity) and target must be unitary operators
     with matching dimensions. Defaults to UnitaryAverageGateFidelity.
+    A measure's declared domain must support unitary gates; this is checked
+    at construction without evaluating the measure.
     """
 
     propagates = "operator"
@@ -31,6 +33,7 @@ class GateSynthesis(Objective):
                 f"{initial.dims} vs {target.dims}"
             )
         super().__init__(initial, target, performance_measure)
+        self.performance_measure.check_domain("unitary")
 
     def check_compatible(self, system) -> None:
         super().check_compatible(system)

@@ -16,6 +16,7 @@ class StateTransfer(Objective):
     matching the state representation is chosen: KetStateFidelity for kets,
     SquaredHSDistance for density matrices (half the squared Hilbert-Schmidt
     distance as the loss; the reported fidelity is its complementary score).
+    A measure's declared domain is checked at construction, without evaluation.
     """
 
     propagates = "state"
@@ -35,6 +36,7 @@ class StateTransfer(Objective):
                     f"Expected PerformanceMeasure as type of performance_measure, got={type(performance_measure)}"
                 )
         super().__init__(initial, target, performance_measure)
+        self.performance_measure.check_domain(state_type(self.initial))
 
     def check_compatible(self, system) -> None:
         super().check_compatible(system)
