@@ -3,29 +3,26 @@ from dataclasses import dataclass
 import numpy as np
 from qutip import Qobj
 
-# TODO: think of usability of optimized pulses - can they be easily put into solver? This is a probable use case after optimisation. Are there more use cases
+
 @dataclass
 class Result:
-    """
-    Output of a completed optimisation procedure.
+    """Optimization output with loss and independent named reporting metrics.
 
-    Attributes
-    ----------
-    optimized_pulses : np.ndarray
-        Control amplitudes after optimisation, shape (n_controls, n_timesteps).
-    fidelity : float
-        Evaluation metric: achieved fidelity (1 = perfect).
-    n_iters : int
-        Number of iterations until convergence or termination.
-    optimizer_info : dict
-        Optimizer-specific metadata (convergence message, etc.).
-    history : list of float
-        History of fidelity values per iteration of optimisation procedure.
+    ``loss_history`` contains the initial loss and one loss per accepted
+    optimizer iterate, excluding line-search trials. ``metrics`` describes
+    ``final_state``; values have measure-specific meanings and need not improve
+    with the loss. No fidelity is inferred for distance or custom loss measures.
     """
 
     optimized_pulses: np.ndarray
-    fidelity: float
+    loss: float
     n_iters: int
-    optimizer_info: dict
-    history: list[float]
-    final_state: Qobj # TODO: currently, used for debugging of GRAPE; is not necessarily used for a user and not necessarily universal across algorithms
+    optimizer_info: object
+    loss_history: list[float]
+    final_state: Qobj
+    metrics: dict[str, float]
+
+    @property
+    def fidelity(self) -> float | None:
+        """Explicitly reported fidelity, or None when unavailable."""
+        return self.metrics.get("fidelity")

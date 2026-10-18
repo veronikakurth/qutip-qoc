@@ -111,14 +111,14 @@ class GRAPE(Algorithm):
         self.optimizer = optimizer or ScipyLBFGS()
         self.optimizer_params = OptimizerParams.from_dict(optimizer_params)
 
-    def build_loss_and_grad(self, problem: OptimalControlProblem, fidelity_history: list | None = None):
+    def build_loss_and_grad(self, problem: OptimalControlProblem, loss_history: list | None = None):
         """Build the GRAPE objective closure `theta -> (loss, grad)`.
 
         Returned standalone so it can be reused outside `solve`. For example, 
         for gradient checks (`scipy.optimize.check_grad`, `approx_fprime`), 
         plotting the loss landscape, or driving a custom optimizer loop. `solve` is just one caller.
 
-        If `fidelity_history` is passed, the objective's fidelity is appended on every call.
+        If `loss_history` is passed, the loss is appended on every call.
         """
         system = problem.system
         objective = problem.objective
@@ -146,8 +146,8 @@ class GRAPE(Algorithm):
             )
             grads = self._gradient(forward_evolution, co_states, dUs, N)
             
-            if fidelity_history is not None:
-                fidelity_history.append(objective.fidelity(final))
+            if loss_history is not None:
+                loss_history.append(loss)
 
             return loss, grads.ravel()
 
@@ -162,8 +162,8 @@ class GRAPE(Algorithm):
 
         # The closure records every evaluation, line-search trials included;
         # the history keeps one entry per accepted iterate, starting at theta0.
-        evaluated_fidelities = []
-        loss_and_grad = self.build_loss_and_grad(problem, evaluated_fidelities)
+        evaluated_losses = []
+        loss_and_grad = self.build_loss_and_grad(problem, evaluated_losses)
         last_evaluated = {}
 
         def tracked_loss_and_grad(theta):
@@ -171,13 +171,13 @@ class GRAPE(Algorithm):
             last_evaluated["theta"] = np.array(theta, copy=True)
             return result
 
-        fidelity_history = []
+        loss_history = []
 
         def record_iteration(theta):
             # The accepted iterate is normally the last point evaluated; recompute otherwise
             if not np.array_equal(theta, last_evaluated.get("theta")):
                 tracked_loss_and_grad(theta)
-            fidelity_history.append(evaluated_fidelities[-1])
+            loss_history.append(evaluated_losses[-1])
 
         # Bounds come from the parameterization (amplitude_range) or from optimizer_params, not both
         optimizer_kwargs = dict(self.optimizer_params.extra)
@@ -214,10 +214,11 @@ class GRAPE(Algorithm):
         final_state = decode(self._forward_pass(propagators, encode(problem.objective.initial))[-1])
         return Result(
             optimized_pulses=optimized_pulses,
-            fidelity=problem.objective.fidelity(final_state),
+            loss=problem.objective.loss(final_state),
+            metrics=problem.objective.report(final_state),
             n_iters=opt_result.nit,
             optimizer_info=opt_result,
-            history=fidelity_history,
+            loss_history=loss_history,
             final_state=final_state
         )
     # TODO: optimisation: do we maybe want to pass a generator of propagators? In order not to load all the propagators into memory at once 

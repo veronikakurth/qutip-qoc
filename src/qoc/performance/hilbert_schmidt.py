@@ -30,14 +30,10 @@ class SquaredHSDistance(PerformanceMeasure):
     """Squared Hilbert-Schmidt distance loss for density matrices, scaled by 1/2:
 
         loss = 0.5 * ||rho - rho_t||_HS**2
-        F = 1 - loss
 
     The loss is nonnegative and vanishes only at the target, including mixed
-    targets. For normalized density matrices F lies in [0, 1]; when both
-    states are pure it equals their squared ket overlap. For mixed states
-    this is an HS similarity score, not the Uhlmann fidelity or the target
-    population. The fixed factor of one half preserves the normalization
-    introduced for density-matrix matching; there is no target-dependent scale.
+    targets. Reports ``hs_distance_squared`` (the unscaled squared distance).
+    No fidelity is inferred from this distance.
     """
 
     accepts = frozenset({"dm"})
@@ -55,12 +51,15 @@ class SquaredHSDistance(PerformanceMeasure):
         self._check_kind(target)
         return current - target
 
-    def fidelity_formula(self):
-        """Display the HS similarity score in plain text or LaTeX."""
+    def report(self, current: Qobj, target: Qobj) -> dict[str, float]:
+        return {"hs_distance_squared": 2.0 * self.loss(current, target)}
+
+    def loss_formula(self):
+        """Display the optimized loss in plain text or LaTeX."""
         return Formula(
-            text="F = 1 - 1/2 ||ρ - ρ_tar||_HS²",
+            text="L = 1/2 ||ρ - ρ_tar||_HS²",
             latex=(
-                r"F = 1 - \frac{1}{2}"
+                r"L = \frac{1}{2}"
                 r"\lVert \rho - \rho_{\mathrm{tar}} \rVert_{\mathrm{HS}}^2"
             ),
         )
@@ -79,9 +78,9 @@ class NormalizedHSOverlap(PerformanceMeasure):
     accepts = frozenset({"dm"})
 
     def loss(self, current: Qobj, target: Qobj) -> float:
-        return 1.0 - self.fidelity(current, target)
+        return 1.0 - self.overlap(current, target)
 
-    def fidelity(self, current: Qobj, target: Qobj) -> float:
+    def overlap(self, current: Qobj, target: Qobj) -> float:
         """Normalized real-valued Hilbert-Schmidt overlap"""
         self._check_kind(current)
         overlap = (target.dag() @ current).tr()
@@ -94,7 +93,10 @@ class NormalizedHSOverlap(PerformanceMeasure):
         self._check_kind(current)
         return -target / _target_norm_sq(target)
 
-    def fidelity_formula(self):
+    def report(self, current: Qobj, target: Qobj) -> dict[str, float]:
+        return {"normalized_hs_overlap": self.overlap(current, target)}
+
+    def overlap_formula(self):
         """Gives Latex representation, but will be formatted as text when Latex rendering is not possible."""
         hs_overlap = Formula(
         text=(
@@ -123,5 +125,5 @@ def _target_norm_sq(target: Qobj) -> float:
     """
     norm_sq = float(np.real((target.dag() @ target).tr()))
     if norm_sq == 0.0:
-        raise ValueError("target state has zero norm; fidelity is undefined")
+        raise ValueError("target state has zero norm; overlap is undefined")
     return norm_sq

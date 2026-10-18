@@ -1,7 +1,7 @@
 """Each performance measure on its own, on physical objects (ADR 0004).
 
 Every measure must:
-1. report fidelity 1 and loss 0 at the target;
+1. have loss 0 at the target for these normalized examples;
 2. return a gradient G with d(loss) = Re<G, dX>, checked against central finite
    differences in the state along complex directions, so sign and conjugation
    slips show up;
@@ -146,7 +146,6 @@ def case(request) -> Case:
 
 def test_perfect_at_target(case):
     target = case.make_state(1)
-    assert np.isclose(case.measure.fidelity(target, target), 1.0)
     assert np.isclose(case.measure.loss(target, target), 0.0)
 
 
@@ -215,14 +214,14 @@ def test_open_default_distinguishes_states_from_maximally_mixed_target(dimension
 @pytest.mark.parametrize("seed", [10, 11, 12])
 def test_open_score_agrees_with_ket_fidelity_when_both_states_are_pure(seed):
     current, target = rand_ket(DIM, seed=seed), rand_ket(DIM, seed=seed + 100)
-    assert SquaredHSDistance().fidelity(ket2dm(current), ket2dm(target)) == pytest.approx(
+    assert 1 - SquaredHSDistance().loss(ket2dm(current), ket2dm(target)) == pytest.approx(
         KetStateFidelity().fidelity(current, target)
     )
 
 
 def test_open_score_is_zero_for_orthogonal_pure_states():
     current, target = (ket2dm(basis(2, j)) for j in (0, 1))
-    assert SquaredHSDistance().fidelity(current, target) == pytest.approx(0.0)
+    assert SquaredHSDistance().loss(current, target) == pytest.approx(1.0)
 
 
 def test_open_loss_preserves_small_distances_near_target():
@@ -236,10 +235,10 @@ def test_normalized_overlap_is_an_explicit_opt_in_to_the_old_objective():
     target = Qobj(np.diag([0.8, 0.2]))
     pure = ket2dm(basis(2, 0))
     objective = StateTransfer(pure, target, performance_measure=NormalizedHSOverlap())
-    assert objective.fidelity(pure) == pytest.approx(0.8 / 0.68)
+    assert objective.report(pure)["normalized_hs_overlap"] == pytest.approx(0.8 / 0.68)
     assert objective.loss(pure) < objective.loss(target)
     # For a pure target this option still reports target population.
-    assert NormalizedHSOverlap().fidelity(target, pure) == pytest.approx(0.8)
+    assert NormalizedHSOverlap().overlap(target, pure) == pytest.approx(0.8)
 
 
 # FunctionalPerformanceMeasure: what the user-supplied gradient must look like

@@ -28,7 +28,7 @@ objective = StateTransfer(initial=basis(2, 0), target=basis(2, 1), performance_m
 
 final = system.evolve(objective.initial, pi_pulse, times)
 
-print(objective.compute(final))
+print(objective.report(final))
 
 
 # State transfer: mixed states
@@ -42,7 +42,7 @@ objective_mixed = StateTransfer(
         performance_measure=SquaredHSDistance())
 
 final_mixed = system.evolve(objective_mixed.initial, pi_pulse, times)
-print(objective_mixed.compute(final_mixed))
+print(objective_mixed.report(final_mixed))
 
 # Gate synthesis
 
@@ -52,7 +52,7 @@ objective_gate = GateSynthesis(
         performance_measure=UnitaryAverageGateFidelity())
 
 final_gate = system.evolve(objective_gate.initial, pi_pulse, times)
-print(objective_gate.compute(final_gate))
+print(objective_gate.report(final_gate))
 
 
 # Custom performance measure via FunctionalPerformanceMeasure
@@ -72,7 +72,7 @@ objective_custom_measure = GateSynthesis(
         target=sigmax(),
         performance_measure=FunctionalPerformanceMeasure(hs_fidelity))
 
-print(objective_custom_measure.compute(final_gate))
+print(objective_custom_measure.report(final_gate))
 
 
 # Trying to imagine how an optimizer would interact with Objective and PerformanceMeasure
@@ -83,4 +83,4 @@ print(objective.performance_measure)
 
 # Compute cost to be minimized
 
-cost = 1 - objective.compute(final)
+cost = objective.loss(final)

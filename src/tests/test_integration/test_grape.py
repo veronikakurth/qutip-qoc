@@ -41,18 +41,20 @@ def test_state_transfer_single_qubit_open_system(x_open_system):
     # Baseline: uncontrolled decay towards |1><1|
     baseline = []
     algorithm.build_loss_and_grad(control_problem, baseline)(np.zeros(K * N))
-    uncontrolled_fidelity = baseline[-1]
+    uncontrolled_loss = baseline[-1]
 
     result = algorithm.solve(control_problem, initial_pulse)
 
     # Amplitude bounds are respected
     assert np.all(np.abs(result.optimized_pulses) <= bound + 1e-10)
-    # Accepted iterates never lose fidelity
-    assert np.all(np.diff(result.history) >= -1e-12)
-    # Control cuts the uncontrolled infidelity by at least an order of magnitude
-    assert 1 - result.fidelity < 0.1 * (1 - uncontrolled_fidelity)
-    # The reported fidelity is the objective's fidelity of the reported final state
-    assert np.isclose(result.fidelity, objective.fidelity(result.final_state))
+    # Accepted iterates never increase loss
+    assert np.all(np.diff(result.loss_history) <= 1e-12)
+    # Control cuts the uncontrolled loss by at least an order of magnitude
+    assert result.loss < 0.1 * uncontrolled_loss
+    # The loss and named metrics describe the reported physical final state
+    assert np.isclose(result.loss, objective.loss(result.final_state))
+    assert result.metrics == objective.report(result.final_state)
+    assert result.fidelity is None
 
 #TODO: group by system types and tasks
 @pytest.fixture

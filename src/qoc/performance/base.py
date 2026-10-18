@@ -30,8 +30,8 @@ class PerformanceMeasure(ABC):
     API
     --------
     ``loss(current, target)``
-        A real scalar that is **minimized**, ``0.0`` at a perfect match and
-        larger the further ``current`` is from the ``target``. 
+        A real scalar that is **minimized**. Its scale, offset and minimum
+        are defined by the measure.
 
     ``loss_gradient(current, target)``
         d(loss)/d(current): the ``G`` with ``d(loss) = Re<G, d(current)>`` under
@@ -40,10 +40,9 @@ class PerformanceMeasure(ABC):
         shaped operator, or an operator for gate synthesis). It need not be
         Hermitian or normalized.
 
-    ``fidelity(current, target)``
-        Used for reporting only, is not optimized against. Defaults to ``1 - loss``,
-        which is right whenever the loss is an infidelity; override it when it
-        is not.
+    ``report(current, target)``
+        Optional named scalar metrics for reporting only. Defaults to an empty
+        dictionary; no fidelity or normalization is inferred from the loss.
 
     ``accepts``
         The kinds of physical object the measure is defined on, as a frozenset
@@ -57,7 +56,7 @@ class PerformanceMeasure(ABC):
 
     @abstractmethod
     def loss(self, current: Qobj, target: Qobj) -> float:
-        """Scalar to minimize; 0.0 at a perfect match."""
+        """Scalar to minimize, with measure-specific scale and offset."""
 
     def loss_gradient(self, current: Qobj, target: Qobj) -> Qobj:
         """d(loss)/d(current), in the same physical representation as ``current``."""
@@ -67,9 +66,9 @@ class PerformanceMeasure(ABC):
             f"Implement loss_gradient, or use a gradient-free algorithm."
         )
 
-    def fidelity(self, current: Qobj, target: Qobj) -> float:
-        """Figure of merit for reporting: 1 = perfect match."""
-        return 1.0 - self.loss(current, target)
+    def report(self, current: Qobj, target: Qobj) -> dict[str, float]:
+        """Named reporting metrics; independent of the optimization contract."""
+        return {}
 
     def check_domain(self, kind: Kind) -> None:
         """Check the objective's semantic domain without evaluating the measure.
@@ -115,6 +114,9 @@ class FidelityMeasure(PerformanceMeasure):
     def loss(self, current: Qobj, target: Qobj) -> float:
         return 1.0 - self.fidelity(current, target)
 
+    def report(self, current: Qobj, target: Qobj) -> dict[str, float]:
+        return {"fidelity": self.fidelity(current, target)}
+
     @abstractmethod
     def fidelity(self, current: Qobj, target: Qobj) -> float:
         """Fidelity on the declared domain; 1 at a perfect match."""
@@ -130,7 +132,7 @@ class FunctionalPerformanceMeasure(PerformanceMeasure):
     * ``FunctionalPerformanceMeasure(func)`` — ``func`` is a **figure of
       merit**: 1 = perfect (higher is better). The loss is ``1 - func(...)``.
     * ``FunctionalPerformanceMeasure.from_loss(func)`` — ``func`` **is** the
-      loss: 0 = perfect, lower is better.
+      loss: lower is better; no normalization is assumed.
 
     Both take an optional ``gradient(current, target) -> Qobj``, required by
     gradient-based algorithms such as GRAPE. It is the gradient of ``func``
@@ -139,24 +141,40 @@ class FunctionalPerformanceMeasure(PerformanceMeasure):
     physical representation as ``current``. For a figure of merit the loss
     gradient is therefore ``-G``.
 
+    Both accept an optional ``report(current, target) -> dict[str, float]``
+    callable for named finite scalar metrics. Without it, reporting is empty;
+    even a figure of merit is not implicitly labelled fidelity.
+
     Both also take an optional ``accepts``: a kind (``"ket"``, ``"dm"``,
     ``"unitary"``) or several. When given, ``current`` is checked against it
     before ``func`` or ``gradient`` runs; when omitted, nothing is checked.
     """
 
-    def __init__(self, func, *, gradient=None, accepts=None, _is_loss: bool = False):
+    def __init__(self, func, *, gradient=None, accepts=None, report=None, _is_loss: bool = False):
         _validate_func(func, "Performance measure function")
         if gradient is not None:
             _validate_func(gradient, "Performance measure gradient")
+        if report is not None:
+            _validate_func(report, "Performance measure report")
+        self._report = report
         self.func = func
         self.gradient = gradient
         self.accepts = _normalized_kinds(accepts)
         self._is_loss = _is_loss
 
     @classmethod
-    def from_loss(cls, func, *, gradient=None, accepts=None) -> "FunctionalPerformanceMeasure":
-        """Wrap a callable that already returns a loss (0 = perfect match)."""
-        return cls(func, gradient=gradient, accepts=accepts, _is_loss=True)
+    def from_loss(cls, func, *, gradient=None, accepts=None, report=None) -> "FunctionalPerformanceMeasure":
+        """Wrap a callable that already returns a loss to minimize."""
+        return cls(func, gradient=gradient, accepts=accepts, report=report, _is_loss=True)
+
+    def report(self, current: Qobj, target: Qobj) -> dict[str, float]:
+        self._check_kind(current)
+        if self._report is None:
+            return {}
+        metrics = self._report(current, target)
+        if not isinstance(metrics, dict) or not all(isinstance(k, str) for k in metrics):
+            raise TypeError("Performance measure report must return a dict with string keys")
+        return {name: _validated_scalar(value) for name, value in metrics.items()}
 
     def loss(self, current: Qobj, target: Qobj) -> float:
         self._check_kind(current)
@@ -176,9 +194,9 @@ class FunctionalPerformanceMeasure(PerformanceMeasure):
 
 
 def _validated_scalar(result) -> float:
-    if not np.isscalar(result):
+    if not np.isscalar(result) or np.iscomplexobj(result):
         raise TypeError(
-            f"Performance measure must return a scalar, got {type(result)}"
+            f"Performance measure must return a real scalar, got {type(result)}"
         )
     if not np.isfinite(result):
         raise ValueError(

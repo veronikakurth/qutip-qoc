@@ -2,7 +2,7 @@ from typing import ClassVar, Literal
 
 from qutip import Qobj
 
-from qoc.performance.base import PerformanceMeasure
+from qoc.performance.base import FidelityMeasure, PerformanceMeasure
 from qoc.utils.display import describe_qobj, format_summary
 
 # TODO: we might need a top-level split of control problem types (this also may make Problem class hierarchy a bit more specific):
@@ -18,7 +18,7 @@ class Objective:
 
     Everything delegates to ``performance_measure``, which owns both the loss
     and its gradient. ``loss`` is what an optimizer minimizes;
-    ``fidelity`` is for reporting only. Each method defaults to this
+    ``report`` provides named metrics for reporting only. Each method defaults to this
     objective's own ``target`` when none is passed.
 
     Subclasses (StateTransfer, GateSynthesis) add domain-specific validation
@@ -65,7 +65,7 @@ class Objective:
 
 
     def loss(self, current: Qobj, target: Qobj = None) -> float:
-        """Scalar the optimizer minimizes; 0.0 at a perfect match."""
+        """Scalar the optimizer minimizes, on the measure's own scale."""
         return self.performance_measure.loss(current, self._target_or_own(target))
 
     def loss_gradient(self, current: Qobj, target: Qobj = None) -> Qobj:
@@ -74,12 +74,15 @@ class Objective:
             current, self._target_or_own(target)
         )
 
-    def fidelity(self, current: Qobj, target: Qobj = None) -> float:
-        """Figure of merit; 1 = perfect match."""
-        return self.performance_measure.fidelity(current, self._target_or_own(target))
+    def report(self, current: Qobj, target: Qobj = None) -> dict[str, float]:
+        """Named metrics evaluated on physical objects."""
+        return self.performance_measure.report(current, self._target_or_own(target))
 
-    #: Retained so existing scripts keep working; `fidelity` is the name to use.
-    compute = fidelity
+    def fidelity(self, current: Qobj, target: Qobj = None) -> float:
+        """Convenience for explicit FidelityMeasure instances only."""
+        if not isinstance(self.performance_measure, FidelityMeasure):
+            raise TypeError("This measure is not a FidelityMeasure; use loss() or report().")
+        return self.performance_measure.fidelity(current, self._target_or_own(target))
 
     def _target_or_own(self, target: Qobj | None) -> Qobj:
         # If no target is passed,

@@ -15,7 +15,7 @@ class StateTransfer(Objective):
     If a performance measure is not selected, the default formula
     matching the state representation is chosen: KetStateFidelity for kets,
     SquaredHSDistance for density matrices (half the squared Hilbert-Schmidt
-    distance as the loss; the reported fidelity is its complementary score).
+    distance as the loss; reports the squared HS distance).
     A measure's declared domain is checked at construction, without evaluation.
     """
 
