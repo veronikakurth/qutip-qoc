@@ -1,7 +1,7 @@
 from qutip import Qobj
 
 from qoc.performance.base import PerformanceMeasure
-from qoc.performance.gate_fidelity import is_unitary, GateFidelity
+from qoc.performance.gate_fidelity import is_unitary, UnitaryAverageGateFidelity
 from .base import Objective
 
 
@@ -10,7 +10,7 @@ class GateSynthesis(Objective):
     Objective for finding controls that implement a target unitary gate.
 
     Both initial (typically identity) and target must be unitary operators
-    with matching dimensions.
+    with matching dimensions. Defaults to UnitaryAverageGateFidelity.
     """
 
     propagates = "operator"
@@ -22,7 +22,7 @@ class GateSynthesis(Objective):
         performance_measure: None | PerformanceMeasure = None,
     ):
         if performance_measure is None:
-            performance_measure = GateFidelity()
+            performance_measure = UnitaryAverageGateFidelity()
         _validate_operator(initial, "initial")
         _validate_operator(target, "target")
         if initial.dims != target.dims:

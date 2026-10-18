@@ -1,7 +1,7 @@
 from qutip import Qobj
 
 from qoc.performance.base import PerformanceMeasure
-from qoc.performance.state_fidelity import state_fidelity_for
+from qoc.performance.state_fidelity import state_measure_for
 from qoc.utils.objective_helpers import validate_states, state_type
 from .base import Objective
 
@@ -12,9 +12,10 @@ class StateTransfer(Objective):
 
     Both initial and target must be kets (pure states) or density matrices (mixed states)
     with matching dimensions.
-    If a performance measure is not selected, the state-fidelity variant
-    matching the state representation is chosen: ClosedStateFidelity for kets,
-    OpenStateFidelity for density matrices.
+    If a performance measure is not selected, the default formula
+    matching the state representation is chosen: KetStateFidelity for kets,
+    SquaredHSDistance for density matrices (half the squared Hilbert-Schmidt
+    distance as the loss; the reported fidelity is its complementary score).
     """
 
     propagates = "state"
@@ -27,7 +28,7 @@ class StateTransfer(Objective):
     ):
         validate_states(initial, target)
         if performance_measure is None:
-            performance_measure = state_fidelity_for(state_type(initial))
+            performance_measure = state_measure_for(state_type(initial))
         else:
             if not isinstance(performance_measure, PerformanceMeasure):
                 raise TypeError(

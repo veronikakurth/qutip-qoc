@@ -1,162 +1,45 @@
+"""Ket fidelity and construction-time selection of default state measures.
+
+Selection uses physical state kind, never the system or its encoding.
+Density-matrix distance and overlap formulas live in hilbert_schmidt.py.
 """
-State fidelity, one class per state kind.
-
-The ket and density-matrix forms are different functionals:
-quadratic in the ket, linear in the density matrix.
-
-Which one applies is decided by the kind of state (ket or density matrix), once,
-when the objective is built (ADR 0003). Both take *physical* states; the
-algorithm owns any encoding, such as vectorizing density matrices (ADR 0004).
-"""
-
-from abc import abstractmethod
+from typing import Literal
 
 import numpy as np
 from qutip import Qobj
 
-from qoc.systems.base import StateType
-
-from .base import PerformanceMeasure
-
-from dataclasses import dataclass
-
-@dataclass
-class Formula:
-    text: str
-    latex: str
-
-    def __str__(self) -> str:
-        return self.text
-
-    def __repr__(self) -> str:
-        return self.text
-
-    def _repr_latex_(self) -> str:
-        return f"$$ {self.latex} $$"
-
-# For state transfer: Basically, we now have one class per formula per state representation
-class StateFidelity(PerformanceMeasure):
-    """Base for state-fidelity measures: ``loss = 1 - fidelity``.
-
-    Not instantiable. Use :func:`state_fidelity_for`, or let
-    ``StateTransfer`` pick the variant matching its states.
-    """
-
-    #: Physical state kind this measure accepts, as a Qobj ``type``.
-    _expected_type: str
-    #: The same kind, in words, for error messages.
-    _state_name: str
-
-    def loss(self, current: Qobj, target: Qobj) -> float:
-        return 1.0 - self.fidelity(current, target)
-
-    @abstractmethod
-    def fidelity(self, current: Qobj, target: Qobj) -> float:
-        """Figure of merit; 1 = perfect match."""
-
-    @abstractmethod
-    def loss_gradient(self, current: Qobj, target: Qobj) -> Qobj:
-        """d(loss)/d(current)."""
-
-    def _check_state_kind(self, current: Qobj) -> None:
-        """Validate that the measure is paired with the kind of state it is defined on."""
-        if current.type != self._expected_type:
-            raise TypeError(
-                f"{type(self).__name__} expects a {self._state_name} "
-                f"(Qobj type {self._expected_type!r}), got type {current.type!r}. "
-                f"This usually means the objective's "
-                f"performance measure does not match its kind of state."
-            )
+from .base import FidelityMeasure, PerformanceMeasure
+from .hilbert_schmidt import SquaredHSDistance
 
 
-class ClosedStateFidelity(StateFidelity):
-    """Fidelity between kets (closed systems):
+class KetStateFidelity(FidelityMeasure):
+    """Squared overlap fidelity between normalized kets:
 
         F = |<t|psi>|**2
     """
 
-    _expected_type = "ket"
-    _state_name = "ket"
-    
+    accepts = frozenset({"ket"})
+
     # TODO: decide how to enable phase-sensitive fidelity
     def fidelity(self, current: Qobj, target: Qobj) -> float:
-        self._check_state_kind(current)
+        self._check_kind(current)
         return float(np.abs(complex(target.dag() @ current)) ** 2)
 
     def loss_gradient(self, current: Qobj, target: Qobj) -> Qobj:
         """loss = 1 - |c|**2 with c = <t|psi>, so
         d(loss) = -2 Re(conj(c) <t|dpsi>) = Re< -2 c t, dpsi>.
         """
-        self._check_state_kind(current)
+        self._check_kind(current)
         c = complex(target.dag() @ current)
         return -2.0 * c * target
 
 
-class OpenStateFidelity(StateFidelity):
-    """Fidelity between density matrices (open systems):
-
-        F = Re tr(rho_t^dag rho) / tr(rho_t^dag rho_t)
-    """
-
-    _expected_type = "oper"
-    _state_name = "density matrix"
- 
-    def fidelity(self, current: Qobj, target: Qobj) -> float:
-        """Normalized real-valued Hilbert-Schmidt overlap"""
-        self._check_state_kind(current)
-        overlap = (target.dag() @ current).tr()
-        return float(np.real(overlap) / _target_norm_sq(target))
-
-    # In GRAPE, used for the final costate
-    # Note: in the case of open state transfer with Hilbert-Schmidt overlap as fidelity,
-    # ``current`` is not used for the gradient of loss. 
-    # But we have to keep to one signature for ``PerformanceMeasure.loss_gradient`` since the exact formula
-    # may vary depending on ``PerformanceMeasure.fidelity``
-    def loss_gradient(self, current: Qobj, target: Qobj) -> Qobj:
-        """loss = 1 - Re tr(rho_t^dag rho) / s is linear in rho, so
-        d(loss) = Re< -rho_t/s, drho>.
-        """
-        self._check_state_kind(current)
-        return -target / _target_norm_sq(target)
-
-    def fidelity_formula(self):
-        """Gives Latex representation, but will be formatted as text when Latex rendering is not possible."""
-        hs_overlap = Formula(
-        text=(
-            "F = Re⟨⟨ρ_tar | ρ⟩⟩ / ||ρ_tar||_HS²\n"
-            "  = Re Tr(ρ_tar† ρ) / Tr(ρ_tar† ρ_tar)"
-        ),
-        latex=(
-            r"F = \frac{"
-            r"\operatorname{Re}\langle\!\langle \rho_{\mathrm{tar}} \mid \rho \rangle\!\rangle"
-            r"}{"
-            r"\lVert \rho_{\mathrm{tar}} \rVert_{\mathrm{HS}}^2"
-            r"}"
-            r"="
-            r"\frac{"
-            r"\operatorname{Re}\,\mathrm{Tr}(\rho_{\mathrm{tar}}^\dagger \rho)"
-            r"}{"
-            r"\mathrm{Tr}(\rho_{\mathrm{tar}}^\dagger \rho_{\mathrm{tar}})"
-            r"}"
-            )
-        )
-        return hs_overlap
-
-
-def state_fidelity_for(state_type: StateType) -> StateFidelity:
-    """The state-fidelity variant for a ``"ket"`` or ``"dm"`` system."""
+def state_measure_for(state_type: Literal["ket", "dm"]) -> PerformanceMeasure:
+    """Select a default formula once from the physical state kind."""
     if state_type == "ket":
-        return ClosedStateFidelity()
+        return KetStateFidelity()
     if state_type == "dm":
-        return OpenStateFidelity()
+        return SquaredHSDistance()
     raise ValueError(
         f"Unknown state_type {state_type!r}; expected 'ket' or 'dm'"
     )
-
-def _target_norm_sq(target: Qobj) -> float:
-    """Tr(rho_t^dag rho_t) = ||rho_t||_HS**2, the normalization that puts F = 1 at rho = rho_t.
-    """
-    norm_sq = float(np.real((target.dag() @ target).tr()))
-    if norm_sq == 0.0:
-        raise ValueError("target state has zero norm; fidelity is undefined")
-    return norm_sq

@@ -1,11 +1,11 @@
 import numpy as np
 from qutip import Qobj, qeye
 
-from .base import PerformanceMeasure
+from .base import FidelityMeasure
 
 
-class GateFidelity(PerformanceMeasure):
-    """Average gate infidelity for a unitary gate.
+class UnitaryAverageGateFidelity(FidelityMeasure):
+    """Average gate fidelity between unitary operators.
 
     For unitaries ``U`` and target ``U_t`` in dimension ``d``, with
     ``g = tr(U_t^dag U)``::
@@ -19,8 +19,7 @@ class GateFidelity(PerformanceMeasure):
     precision.
     """
 
-    def loss(self, current: Qobj, target: Qobj) -> float:
-        return 1.0 - self.fidelity(current, target)
+    accepts = frozenset({"unitary"})
 
     def fidelity(self, current: Qobj, target: Qobj) -> float:
         _validate_operators(current, target)
