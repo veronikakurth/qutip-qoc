@@ -1,18 +1,60 @@
 import numpy as np
 
 from qoc.pulse.base import PulseParameterization
+# Due to n_controls attribute of the base class, this means we impose a one-to-many relationship: 
+# one parameterisation for many controls. This might not be the case in general
+# Maybe we need a simple way to define parameterisation per control via factory approach
+# Example of workflow: 
+# User provides a control function per Hamiltonian
+# If the goal is to use a gradient driven method, we ask for derivatives with respect to every parameter of control function (alpha, time)
+# (Unless the method supports auto-differentiation)
+# Based on it, a class is created with API that is necessary to be used by Algorithm etc.
+# Can we have an alternative class to the base class that would accept arguments in a more general form? Like FunctionalPerformance measure, for example
 
+# Potentially, we could use a class factory function pattern to generate different classes from configuration
+# This solves, however, only the problem of the user interface to pulse parameterisation
+# There is another problem left: binding parameterisation to a control Hamiltonian and keeping this information together.
+class Fourier(PulseParameterization):
+    
+    def control_func(self, a1, a2, t):
+        # a1 - amplitude, a2 - frequency 
+        return a1 * np.sin(a2 * t)
+   
+    def da1_control_func(self, a1, a2, t):
+        return np.sin(a2 * t)
+
+    def da2_control_func(self, a1, a2, t):
+        return np.cos(a2 * t) * t
+
+    def dt_control_func(self, a1, a2, t):
+        return np.cos(a2 * t) * a1 * a2
+    
+    def jacobian(self, theta, times):
+        da1_derivatives = self.da1_control_func(*theta, times).reshape(len(times), 1)
+        da2_derivatives = self.da2_control_func(*theta, times).reshape(len(times), 1)
+        return np.concat([da1_derivatives, da2_derivatives], axis=1)
+
+    
+    def initial_theta(self, amplitudes: np.ndarray) -> np.ndarray:
+        return np.array([self.control_func(*amplitudes, t=0)])
+    # For now, this API seems to be enough. The most of the API of the base class is not used. As well as n_controls
+
+    # how useful is this property
+    @property
+    def n_parameters(self) -> int:
+        return 2 # do we have to include time?
 
 class PiecewiseConstant(PulseParameterization):
     """Piecewise-constant amplitudes on a fixed time grid.
 
-    The parameter vector theta is (n_controls, n_timesteps) amplitude array.
+    The parameter vector theta is (1, n_timesteps) amplitude array.
     Main use: in GRAPE, where every time slice carries one independently-tuned amplitude per control.
 
     Parameters
     ----------
-    n_controls : int
-        Number of controls.
+    T : 
+    N : 
+    times :
     amplitude_range : tuple[float | None, float | None] | None, optional
         (min, max) bounds applied to every amplitude. Use ``None`` on
         either side to leave that direction unbounded. Default ``None`` means
@@ -26,13 +68,11 @@ class PiecewiseConstant(PulseParameterization):
 
     def __init__(
         self,
-        n_controls: int,
         T: int = None,
         N: int = None,
         times: np.ndarray = None,
         amplitude_range: tuple[float | None, float | None] | None = None
     ):
-        self.n_controls = n_controls
         if times is None:
             times = np.linspace(0, T, N) # TODO: add validation that checks that either times or T + N are passed (exclusive or)
         self.times = np.asarray(times)
@@ -45,7 +85,7 @@ class PiecewiseConstant(PulseParameterization):
 
     @property
     def n_parameters(self) -> int:
-        return self.n_controls * self.n_timesteps
+        return self.n_timesteps
 
     def bounds(self) -> list[tuple[float | None, float | None]] | None:
         if self.amplitude_range is None:
@@ -53,18 +93,15 @@ class PiecewiseConstant(PulseParameterization):
         return [self.amplitude_range] * self.n_parameters
 
     def to_amplitudes(self, theta: np.ndarray) -> np.ndarray:
-        """Reshape theta into a (n_controls, n_timesteps) amplitude array.
+        """Reshape theta into a (1, n_timesteps) amplitude array.
         """
-        return np.asarray(theta).reshape(self.n_controls, self.n_timesteps)
+        return np.asarray(theta).reshape(1, self.n_timesteps)
 
-    def amplitude_jacobian(self, theta: np.ndarray, times: np.ndarray) -> np.ndarray:
-        """Dense identity Jacobian, shape (K, N, K*N)."""
+    def jacobian(self, *theta: np.ndarray, times: np.ndarray) -> np.ndarray:
+        """Dense identity Jacobian, shape (N, N)."""
         # TODO: returned in a dense form (numpy array) - can we do better?
-        K, N = self.n_controls, self.n_timesteps
-        J = np.zeros((K, N, K * N))
-        for k in range(K):
-            for j in range(N):
-                J[k, j, k * N + j] = 1.0
+        N = self.n_timesteps
+        J = np.diag((N, N))
         return J
 
     def initial_theta(self, amplitudes: np.ndarray) -> np.ndarray:
@@ -75,9 +112,9 @@ class PiecewiseConstant(PulseParameterization):
         piecewise-constant controls.
         """
         amplitudes = np.asarray(amplitudes)
-        if amplitudes.shape != (self.n_controls, self.n_timesteps):
+        if amplitudes.shape != (1, self.n_timesteps):
             raise ValueError(
-                f"amplitudes must have shape ({self.n_controls}, "
+                f"amplitudes must have shape (1, "
                 f"{self.n_timesteps}), got {amplitudes.shape}"
             )
         return amplitudes.ravel()

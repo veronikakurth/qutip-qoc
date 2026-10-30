@@ -3,6 +3,8 @@ from typing import Callable
 
 import numpy as np
 
+# TODO: there could be also a class method approach (like in ControlledSystem) on creating an exact instance of a parameterisation
+# Plus a class factory approach for creating custom parameterisations on the fly
 
 class PulseParameterization(ABC):
     """Map an optimizer parameter vector theta -> control amplitudes u(t).
@@ -11,25 +13,24 @@ class PulseParameterization(ABC):
     u has shape (n_controls, n_timesteps) on the algorithm's time grid.
     """
 
-    n_controls: int
-
     @property
     @abstractmethod
-    def n_parameters(self) -> int: ...
+    def n_parameters(self) -> int: ... # Does it include time?
 
-    @abstractmethod
+    def control_function(self, *args): ...
+    
+    # This method only works for len(theta) == n_timesteps, which is not the case in general
     def to_amplitudes(self, theta: np.ndarray, times: np.ndarray) -> np.ndarray:
-        """Return amplitudes, shape (n_controls, len(times))."""
+        """Return amplitudes, shape (1, len(times))."""
 
-    def amplitude_jacobian(
+    def jacobian(
         self, theta: np.ndarray, times: np.ndarray
     ) -> np.ndarray | None:
-        """Return du/dtheta with shape (n_controls, len(times), n_parameters)."""
+        """Returns derivatives of control function w.r.t. control parameters.
+        Shape: (len(times), n_parameters)."""
         return None
-
-    def to_callable(self, theta: np.ndarray) -> Callable[[float], np.ndarray] | None:
-        """Return a callable t -> amplitudes(t) of shape (n_controls,)."""
-        return None
+      
+    def time_derivative() -> np.ndarray | None: ...
 
     def bounds(self) -> list | None:
         """Per-parameter bounds for constrained optimizers.
@@ -43,7 +44,7 @@ class PulseParameterization(ABC):
 
     @abstractmethod
     def initial_theta(self, *args, **kwargs) -> np.ndarray:
-        """Build a 1-D parameter vector from user-friendly input.
+        """Build a 1-D parameter vector from user input.
 
         Subclass-specific signature.
         """
