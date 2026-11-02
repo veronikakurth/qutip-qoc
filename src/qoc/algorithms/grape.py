@@ -1,6 +1,6 @@
 import numpy as np
-from typing import Callable, Union
-from qutip import Qobj, basis, sigmax, sigmaz
+from typing import Callable
+from qutip import Qobj
 from scipy.linalg import expm, expm_frechet
 from dataclasses import dataclass, field, fields
 
@@ -15,6 +15,8 @@ from qoc.systems.base import System
 
 # TODO: the output is a bit of a monster right now. 
 # Firstly, it's inefficient to hold all the Qobjs in memory (replace list with generator?), secondly, a tuple of lists is a bit too much - can we simplify it a bit?
+
+# TODO: make it more explicit that this function also computes propagator's gradients -> currently, this is embedded into the propagatgor computation and if we want to compute derivative differnetly, it's not possible
 def _step_propagators(system: System, u: np.ndarray, dt: float) -> tuple[list[Qobj], list[list[Qobj]]]:
     """Calculate per-step unitaries U_j = expm(prefactor * H_j * dt).
        Prefactor term depends on the system type and is already included in ``System.motion_generator_time_j``'s
@@ -51,15 +53,10 @@ def _real_trace(overlap) -> float:
 
 
 def _encoding_for(system: System, objective: Objective) -> tuple[Callable[[Qobj], Qobj], Callable[[Qobj], Qobj]]:
-    """The ``(encode, decode)`` pair for what ``objective`` propagates (ADR 0004).
 
-    GRAPE propagates encoded objects, while the objective's measure sees only
-    physical ones. ``encode`` also maps the measure's physical gradient onto the
-    seed of the backward pass, which is exact by the encoding contract in ADR 0004.
-    """
-    if objective.propagates == "state":
+    if objective.domain == "state":
         return system.encode_state, system.decode_state
-    if objective.propagates == "operator":
+    if objective.domain == "operator":
         return system.encode_operator, system.decode_operator
     raise ValueError(
         f"{type(objective).__name__}.propagates must be 'state' or 'operator', "
@@ -88,18 +85,15 @@ class GRAPE(Algorithm):
     """Gradient Ascent Pulse Engineering with an adjoint (forward/backward) gradient.
 
     Supports state transfer (closed and open systems) and gate synthesis (closed
-    systems). GRAPE propagates the system's *encoded* representation; the
-    objective's performance measure sees only *physical* objects. GRAPE decodes
-    the final object for the measure and encodes the measure's gradient to seed
-    the backward pass (ADR 0004), so any measure that implements
-    ``loss_gradient`` works unchanged.
+    systems). 
     """
 
     def __init__(
         self,
         parameterization: PulseParameterization,
+        problem: OptimalControlProblem,
         optimizer: Optimizer | None = None,
-        optimizer_params: dict | None = None,
+        optimizer_args: dict | None = None,
     ):
         super().__init__()
         if not isinstance(parameterization, PiecewiseConstant):
@@ -109,23 +103,14 @@ class GRAPE(Algorithm):
             )
         self.parameterization = parameterization
         self.optimizer = optimizer or ScipyLBFGS()
-        self.optimizer_params = OptimizerParams.from_dict(optimizer_params)
+        self.optimizer_args = OptimizerParams.from_dict(optimizer_args)
+        self.system = problem.system
+        self.objective = problem.objective
+        self.encode_func, self.decode_func = _encoding_for(self.system, self.objective)
 
-    def build_loss_and_grad(self, problem: OptimalControlProblem, loss_history: list | None = None):
+    def build_loss_and_grad(self, initial, loss_history: list | None = None):
         """Build the GRAPE objective closure `theta -> (loss, grad)`.
-
-        Returned standalone so it can be reused outside `solve`. For example, 
-        for gradient checks (`scipy.optimize.check_grad`, `approx_fprime`), 
-        plotting the loss landscape, or driving a custom optimizer loop. `solve` is just one caller.
-
-        If `loss_history` is passed, the loss is appended on every call.
         """
-        system = problem.system
-        objective = problem.objective
-
-        # The algorithm owns the encoding; the objective and its measure see only physical objects
-        encode, decode = _encoding_for(system, objective)
-        initial = encode(objective.initial)
         # Extract algorithm-specific info from parameterization
         dt = self.parameterization.dt
         N = self.parameterization.n_timesteps
@@ -134,17 +119,16 @@ class GRAPE(Algorithm):
             u = self.parameterization.to_amplitudes(theta)
             # GRAPE-specific steps
             # Compute propagators for every time step
-            Us, dUs = _step_propagators(system, u, dt) # -> list[Qobj]
+            Us, dUs = _step_propagators(self.system, u, dt) # -> list[Qobj]
             # Compute forward pass (starting with objective's initial state - pre-encoded)
             forward_evolution = self._forward_pass(Us, initial)
-            final = decode(forward_evolution[-1])
-            loss = objective.loss(final)
+            final = self.decode_func(forward_evolution[-1])
+            loss = self.objective.loss(final)
             # For backward pass, start with the derivative of the loss w.r.t. the final propagated object (~ terminal costate).
-            # The measure returns it in physical form; encoding it gives the seed in the propagated representation.
             co_states = self._backward_pass(
-                Us, encode(objective.loss_gradient(final))
+                    Us, self.encode_func(self.objective.loss_gradient(final))
             )
-            grads = self._gradient(forward_evolution, co_states, dUs, N)
+            grads = self._gradient_assembly(forward_evolution, co_states, dUs, N)
             
             if loss_history is not None:
                 loss_history.append(loss)
@@ -153,17 +137,15 @@ class GRAPE(Algorithm):
 
         return loss_and_grad
 
-    def solve(self, problem: OptimalControlProblem, initial_param_values: np.ndarray, callback=None) -> Result:
+    def solve(self, initial_param_values: np.ndarray, callback=None) -> Result:
         """Main entry point."""
-        system = problem.system
 
         # Get initial values of parameter vector
         theta0 = self.parameterization.initial_theta(initial_param_values)
 
-        # The closure records every evaluation, line-search trials included;
-        # the history keeps one entry per accepted iterate, starting at theta0.
         evaluated_losses = []
-        loss_and_grad = self.build_loss_and_grad(problem, evaluated_losses)
+        initial = self.encode_func(self.objective.initial)
+        loss_and_grad = self.build_loss_and_grad(initial, evaluated_losses)
         last_evaluated = {}
 
         def tracked_loss_and_grad(theta):
@@ -179,14 +161,14 @@ class GRAPE(Algorithm):
                 tracked_loss_and_grad(theta)
             loss_history.append(evaluated_losses[-1])
 
-        # Bounds come from the parameterization (amplitude_range) or from optimizer_params, not both
-        optimizer_kwargs = dict(self.optimizer_params.extra)
-        param_bounds = self.parameterization.bounds()
+        # Bounds come from the parameterization (amplitude_range) or from optimizer_args, not both
+        optimizer_kwargs = dict(self.optimizer_args.extra)
+        param_bounds = self.parameterization.get_bounds()
         if param_bounds is not None:
             if optimizer_kwargs.get("bounds") is not None:
                 raise ValueError(
                     "Bounds were given both by the parameterization (amplitude_range) "
-                    "and by optimizer_params['bounds']; pass only one."
+                    "and by optimizer_args['bounds']; pass only one."
                 )
             optimizer_kwargs["bounds"] = param_bounds
 
@@ -194,8 +176,8 @@ class GRAPE(Algorithm):
         opt_result = self.optimizer.minimize(
             tracked_loss_and_grad,
             x0=theta0,
-            max_iter=self.optimizer_params.max_iter,
-            tol=self.optimizer_params.tol,
+            max_iter=self.optimizer_args.max_iter,
+            tol=self.optimizer_args.tol,
             callback=record_iteration,
             **optimizer_kwargs
         )
@@ -209,13 +191,11 @@ class GRAPE(Algorithm):
 
         optimized_pulses = self.parameterization.to_amplitudes(opt_result.x)
         dt = self.parameterization.dt
-        encode, decode = _encoding_for(system, problem.objective)
-        propagators = _step_propagators(system, optimized_pulses, dt)[0]
-        final_state = decode(self._forward_pass(propagators, encode(problem.objective.initial))[-1])
+        propagators = _step_propagators(self.system, optimized_pulses, dt)[0]
+        final_state = self.decode_func(self._forward_pass(propagators, initial)[-1])
         return Result(
             optimized_pulses=optimized_pulses,
-            loss=problem.objective.loss(final_state),
-            metrics=problem.objective.report(final_state),
+            loss=self.objective.loss(final_state),
             n_iters=opt_result.nit,
             optimizer_info=opt_result,
             loss_history=loss_history,
@@ -247,9 +227,9 @@ class GRAPE(Algorithm):
             co_states[j] = propagators[j].dag() @ co_states[j + 1]
         return co_states
     
+    # TODO: this specific formula: how robust is it to the change of goal functions?
     # TODO: make sure dUs[j][k] is partial derivative of propagator w.r.t. control u[k, j] -> dUs[j][k]=dU_j / du_{k, j}
-    # TODO: important: not generator derivative - propagator derivative!
-    def _gradient(self, forward_evolution: list[Qobj], co_states: list[Qobj], dUs: list[list[Qobj]], N: int) -> np.ndarray:
+    def _gradient_assembly(self, forward_evolution: list[Qobj], co_states: list[Qobj], dUs: list[list[Qobj]], N: int) -> np.ndarray:
         """Adjoint-method gradient of the loss. Requires forward + backward passes.
 
         The gradient factorizes as

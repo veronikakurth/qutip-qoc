@@ -5,49 +5,27 @@ from typing import Iterable, Literal
 import numpy as np
 from qutip import Qobj
 
-#: Kind of physical object a measure scores. ``"dm"`` and ``"unitary"`` are both
-#: Qobj type ``"oper"``; a measure can tell them apart only by its declaration.
+#: Kind of physical object a measure scores. 
 Kind = Literal["ket", "dm", "unitary"]
 
 _KINDS: tuple[Kind, ...] = ("ket", "dm", "unitary")
 _QOBJ_TYPE = {"ket": "ket", "dm": "oper", "unitary": "oper"}
 _KIND_NAME = {"ket": "ket", "dm": "density matrix", "unitary": "unitary"}
 
-
 class PerformanceMeasure(ABC):
     """
     Defines *what* the optimizer minimizes for a given objective.
 
-    The primitive is the **loss**, not a fidelity. A measure owns both the loss
-    and its gradient.
-
-    A measure works on **physical objects only**: kets, density matrices, or
-    operators, exactly as the user wrote ``initial`` and ``target``. It never sees
-    a system's encoded representation (e.g. a vectorized density matrix); the
-    algorithm encodes and decodes around it (ADR 0004). A formula is therefore
-    written once, in physics notation, and works for any system encoding.
-
     API
     --------
     ``loss(current, target)``
-        A real scalar that is **minimized**. Its scale, offset and minimum
-        are defined by the measure.
 
     ``loss_gradient(current, target)``
-        d(loss)/d(current): the ``G`` with ``d(loss) = Re<G, d(current)>`` under
-        the Hilbert-Schmidt inner product ``<A, B> = tr(A^dag B)``, returned in
-        the same *physical* representation as ``current`` (a ket, a density-matrix
-        shaped operator, or an operator for gate synthesis). It need not be
-        Hermitian or normalized.
-
-    ``report(current, target)``
-        Optional named scalar metrics for reporting only. Defaults to an empty
-        dictionary; no fidelity or normalization is inferred from the loss.
 
     ``accepts``
-        The kinds of physical object the measure is defined on, as a frozenset
-        of ``"ket"``, ``"dm"``, ``"unitary"``; ``None`` if undeclared. A measure
-        that declares it is checked against the objective's semantic domain
+        The kinds of physical object the measure is defined on:
+        ``"ket"``, ``"dm"``, ``"unitary"``; ``None`` if undeclared. 
+        A measure that declares it is checked against the objective's semantic domain
         at construction via ``check_domain``. ``_check_kind`` additionally
         checks Qobj representation at evaluation time.
     """
@@ -56,19 +34,15 @@ class PerformanceMeasure(ABC):
 
     @abstractmethod
     def loss(self, current: Qobj, target: Qobj) -> float:
-        """Scalar to minimize, with measure-specific scale and offset."""
+        """Scalar to minimize."""
 
     def loss_gradient(self, current: Qobj, target: Qobj) -> Qobj:
-        """d(loss)/d(current), in the same physical representation as ``current``."""
+        """d(loss)/d(current)."""
         raise NotImplementedError(
             f"{type(self).__name__} does not implement loss_gradient, so it "
             f"cannot be used with a gradient-based algorithm such as GRAPE. "
             f"Implement loss_gradient, or use a gradient-free algorithm."
         )
-
-    def report(self, current: Qobj, target: Qobj) -> dict[str, float]:
-        """Named reporting metrics; independent of the optimization contract."""
-        return {}
 
     def check_domain(self, kind: Kind) -> None:
         """Check the objective's semantic domain without evaluating the measure.
@@ -89,7 +63,7 @@ class PerformanceMeasure(ABC):
         """Validate that ``current`` is a kind this measure accepts; no-op if undeclared.
 
         Checks the Qobj type only, so it cannot tell a density matrix from a
-        unitary. Validation, not dispatch: the measure is already chosen.
+        unitary.
         """
         if self.accepts is None:
             return
@@ -106,16 +80,14 @@ class FidelityMeasure(PerformanceMeasure):
     """Base for explicit fidelities, with ``loss = 1 - fidelity``.
 
     Subclasses define the fidelity formula and declare its physical domain
-    via ``accepts``. Gradients are optional, just as on PerformanceMeasure:
+    via ``accepts``. 
+    Gradients are optional:
     gradient-free algorithms need only the fidelity implementation, while
     gradient-based algorithms require ``loss_gradient`` as well.
     """
 
     def loss(self, current: Qobj, target: Qobj) -> float:
         return 1.0 - self.fidelity(current, target)
-
-    def report(self, current: Qobj, target: Qobj) -> dict[str, float]:
-        return {"fidelity": self.fidelity(current, target)}
 
     @abstractmethod
     def fidelity(self, current: Qobj, target: Qobj) -> float:
@@ -140,10 +112,6 @@ class FunctionalPerformanceMeasure(PerformanceMeasure):
     ``d(func) = Re<G, d(current)>`` under ``<A, B> = tr(A^dag B)``, in the same
     physical representation as ``current``. For a figure of merit the loss
     gradient is therefore ``-G``.
-
-    Both accept an optional ``report(current, target) -> dict[str, float]``
-    callable for named finite scalar metrics. Without it, reporting is empty;
-    even a figure of merit is not implicitly labelled fidelity.
 
     Both also take an optional ``accepts``: a kind (``"ket"``, ``"dm"``,
     ``"unitary"``) or several. When given, ``current`` is checked against it

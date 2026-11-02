@@ -15,47 +15,43 @@ from qoc.pulse.base import PulseParameterization
 # This solves, however, only the problem of the user interface to pulse parameterisation
 # There is another problem left: binding parameterisation to a control Hamiltonian and keeping this information together.
 class Fourier(PulseParameterization):
-    
-    def control_func(self, a1, a2, t):
-        # a1 - amplitude, a2 - frequency 
-        return a1 * np.sin(a2 * t)
-   
-    def da1_control_func(self, a1, a2, t):
-        return np.sin(a2 * t)
-
-    def da2_control_func(self, a1, a2, t):
-        return np.cos(a2 * t) * t
-
-    def dt_control_func(self, a1, a2, t):
-        return np.cos(a2 * t) * a1 * a2
-    
-    def jacobian(self, theta, times):
-        da1_derivatives = self.da1_control_func(*theta, times).reshape(len(times), 1)
-        da2_derivatives = self.da2_control_func(*theta, times).reshape(len(times), 1)
-        return np.concat([da1_derivatives, da2_derivatives], axis=1)
-
-    
-    def initial_theta(self, amplitudes: np.ndarray) -> np.ndarray:
-        return np.array([self.control_func(*amplitudes, t=0)])
-    # For now, this API seems to be enough. The most of the API of the base class is not used. As well as n_controls
-
-    # how useful is this property
+        
+    # how useful is this property; how not to hardcode it for the user-created parameterisation
     @property
     def n_parameters(self) -> int:
-        return 2 # do we have to include time?
+        return 2
+
+    def control_func(self, *args):
+        a = args["a"]
+        t = args["t"]
+        # a1 - amplitude, a2 - frequency 
+        return a[0] * np.sin(a[1] * t)
+   
+    def control_funcs_derivatives(self, *args) -> list[callable]:
+        # could be replaced with autograd!
+        a = args["a"]
+        t = args["t"]
+        return [lambda t, a: np.sin(a[1] * t),                         # dc/da1
+                lambda t, a: a[0] * t * np.cos(a[1] * t)]     # dc/da2
+    #
+    # def dt_control_func(self, *args):
+    #     return np.cos(a2 * t) * a1 * a2
+    
+    def initial_theta(self, values: np.ndarray) -> np.ndarray:
+        return np.array([self.control_func(*values, t=0)])
+
 
 class PiecewiseConstant(PulseParameterization):
     """Piecewise-constant amplitudes on a fixed time grid.
 
     The parameter vector theta is (1, n_timesteps) amplitude array.
-    Main use: in GRAPE, where every time slice carries one independently-tuned amplitude per control.
 
     Parameters
     ----------
     T : 
     N : 
     times :
-    amplitude_range : tuple[float | None, float | None] | None, optional
+    bounds : tuple[float | None, float | None] | None, optional
         (min, max) bounds applied to every amplitude. Use ``None`` on
         either side to leave that direction unbounded. Default ``None`` means
         the controls are fully unconstrained.
@@ -71,13 +67,13 @@ class PiecewiseConstant(PulseParameterization):
         T: int = None,
         N: int = None,
         times: np.ndarray = None,
-        amplitude_range: tuple[float | None, float | None] | None = None
+        bounds: tuple[float | None, float | None] | None = None
     ):
         if times is None:
             times = np.linspace(0, T, N) # TODO: add validation that checks that either times or T + N are passed (exclusive or)
         self.times = np.asarray(times)
         self.n_timesteps = len(self.times)
-        self.amplitude_range = amplitude_range
+        self.bounds = bounds
     
     @property
     def dt(self) -> float:
@@ -87,10 +83,10 @@ class PiecewiseConstant(PulseParameterization):
     def n_parameters(self) -> int:
         return self.n_timesteps
 
-    def bounds(self) -> list[tuple[float | None, float | None]] | None:
-        if self.amplitude_range is None:
+    def get_bounds(self) -> list[tuple[float | None, float | None]] | None:
+        if self.bounds is None:
             return None
-        return [self.amplitude_range] * self.n_parameters
+        return [self.bounds] * self.n_parameters
 
     def to_amplitudes(self, theta: np.ndarray) -> np.ndarray:
         """Reshape theta into a (1, n_timesteps) amplitude array.
@@ -118,3 +114,14 @@ class PiecewiseConstant(PulseParameterization):
                 f"{self.n_timesteps}), got {amplitudes.shape}"
             )
         return amplitudes.ravel()
+
+
+class Parameterisation:
+
+    @staticmethod
+    def fourier():
+        return Fourier()
+
+    @staticmethod
+    def piecewise_constant(T, N, times, bounds):
+        return PiecewiseConstant(T, N, times, bounds)

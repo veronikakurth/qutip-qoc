@@ -8,14 +8,9 @@ from .base import Objective
 class GateSynthesis(Objective):
     """
     Objective for finding controls that implement a target unitary gate.
-
-    Both initial (typically identity) and target must be unitary operators
-    with matching dimensions. Defaults to UnitaryAverageGateFidelity.
-    A measure's declared domain must support unitary gates; this is checked
-    at construction without evaluating the measure.
     """
 
-    propagates = "operator"
+    domain = "operator"
 
     def __init__(
         self,

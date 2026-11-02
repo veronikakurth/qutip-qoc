@@ -7,7 +7,7 @@ from qoc.utils.display import describe_qobj, format_summary
 
 # TODO: we might need a top-level split of control problem types (this also may make Problem class hierarchy a bit more specific):
 # 1. Targeted control: the problem is defined by reaching or approximating a specified object -> requires an explicit target
-# 2. Objective-drivel control: the problem is defined by optimising a functional, not matching one fixed object -> doesn't require an explicit target. We will design the interface for them later.
+# 2. Objective-driven control: the problem is defined by optimising a functional, not matching one fixed object -> doesn't require an explicit target. We will design the interface for them later.
 
 class Objective:
     """
@@ -18,20 +18,15 @@ class Objective:
 
     Everything delegates to ``performance_measure``, which owns both the loss
     and its gradient. ``loss`` is what an optimizer minimizes;
-    ``report`` provides named metrics for reporting only. Each method defaults to this
-    objective's own ``target`` when none is passed.
 
     Subclasses (StateTransfer, GateSynthesis) add domain-specific validation
     of initial and target in their constructors.
 
-    All methods take and return *physical* objects (kets, density matrices,
-    operators), never a system's encoded representation (ADR 0004).
+    Contract: All methods take and return *physical* objects (kets, density matrices,
+    operators).
     """
 
-    #: What an algorithm propagates for this objective: a ``"state"`` or an
-    #: ``"operator"``. Selects the ``System`` encode/decode pair (ADR 0004);
-    #: the Qobj type cannot, since a density matrix and a unitary are both "oper".
-    propagates: ClassVar[Literal["state", "operator"]]
+    domain: ClassVar[Literal["state", "operator"]]
 
     def __init__(
         self,
@@ -65,24 +60,14 @@ class Objective:
 
 
     def loss(self, current: Qobj, target: Qobj = None) -> float:
-        """Scalar the optimizer minimizes, on the measure's own scale."""
+        """Scalar the optimizer minimizes"""
         return self.performance_measure.loss(current, self._target_or_own(target))
 
     def loss_gradient(self, current: Qobj, target: Qobj = None) -> Qobj:
-        """d(loss)/d(current), in the same physical representation as ``current``."""
+        """d(loss)/d(current)"""
         return self.performance_measure.loss_gradient(
             current, self._target_or_own(target)
         )
-
-    def report(self, current: Qobj, target: Qobj = None) -> dict[str, float]:
-        """Named metrics evaluated on physical objects."""
-        return self.performance_measure.report(current, self._target_or_own(target))
-
-    def fidelity(self, current: Qobj, target: Qobj = None) -> float:
-        """Convenience for explicit FidelityMeasure instances only."""
-        if not isinstance(self.performance_measure, FidelityMeasure):
-            raise TypeError("This measure is not a FidelityMeasure; use loss() or report().")
-        return self.performance_measure.fidelity(current, self._target_or_own(target))
 
     def _target_or_own(self, target: Qobj | None) -> Qobj:
         # If no target is passed,

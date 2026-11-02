@@ -20,9 +20,3 @@ class Result:
     optimizer_info: object
     loss_history: list[float]
     final_state: Qobj
-    metrics: dict[str, float]
-
-    @property
-    def fidelity(self) -> float | None:
-        """Explicitly reported fidelity, or None when unavailable."""
-        return self.metrics.get("fidelity")

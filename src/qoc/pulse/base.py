@@ -5,7 +5,7 @@ import numpy as np
 
 # TODO: there could be also a class method approach (like in ControlledSystem) on creating an exact instance of a parameterisation
 # Plus a class factory approach for creating custom parameterisations on the fly
-
+# TODO: make the base class a thin wrapper around functions and its derivatives
 class PulseParameterization(ABC):
     """Map an optimizer parameter vector theta -> control amplitudes u(t).
 
@@ -15,23 +15,16 @@ class PulseParameterization(ABC):
 
     @property
     @abstractmethod
-    def n_parameters(self) -> int: ... # Does it include time?
+    def n_parameters(self) -> int: ...
 
-    def control_function(self, *args): ...
+    def control_func(self, *args) -> callable: ...
     
-    # This method only works for len(theta) == n_timesteps, which is not the case in general
-    def to_amplitudes(self, theta: np.ndarray, times: np.ndarray) -> np.ndarray:
-        """Return amplitudes, shape (1, len(times))."""
+    # w.r.t. control parameters
+    def control_funcs_derivatives(self, *args) -> list[callable]: ...
 
-    def jacobian(
-        self, theta: np.ndarray, times: np.ndarray
-    ) -> np.ndarray | None:
-        """Returns derivatives of control function w.r.t. control parameters.
-        Shape: (len(times), n_parameters)."""
-        return None
-      
-    def time_derivative() -> np.ndarray | None: ...
-
+    def dt_control_func(self, *args): ...
+    
+    # TODO: this could also return functions
     def bounds(self) -> list | None:
         """Per-parameter bounds for constrained optimizers.
 
@@ -48,3 +41,9 @@ class PulseParameterization(ABC):
 
         Subclass-specific signature.
         """
+
+
+# Idea: parameterisations = PulseParameterization()
+# import parameterizations
+# parameterizations.fourier(...)
+# parameterizations.piecewise_constant(...)

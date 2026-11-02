@@ -19,7 +19,7 @@ class StateTransfer(Objective):
     A measure's declared domain is checked at construction, without evaluation.
     """
 
-    propagates = "state"
+    domain = "state"
 
     def __init__(
         self,
